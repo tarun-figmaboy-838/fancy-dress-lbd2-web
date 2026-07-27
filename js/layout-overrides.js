@@ -56,32 +56,105 @@ window.LAYOUT_OVERRIDES = [
      floated 17px high and Level 5's shoe sat 16.5px low, sunk into the plinth's
      grey rim, while levels 2, 3, 4 and 6 clustered within 12px of each other.
 
-     Levels 1-4 are put on that cluster's line: with these values all four land
-     their visible bottom at stage y = 861, measured.
+     Both axes are set from the RENDERED frame, not from arithmetic on the
+     sprite files. Each level was screenshotted twice — once with the item shown
+     and once with it hidden — and the pixels that changed between the two are
+     the item and nothing else. Measured at 1920x1080 so one screen pixel is one
+     stage unit. That is what finally settled it: reasoning from sprite alpha put
+     the six within 0px of each other on paper while the frame still showed an
+     8px spread, because the artwork has soft edges the alpha threshold missed.
 
-     Levels 5 and 6 use values supplied by the designer from God Mode instead.
-     A designer eyeballing each object per-shape beats a single arithmetic rule
-     here — a flat-soled shoe reads as resting lower than a soft-based cup — so
-     these win over the computed line. What they cost, measured: the shoe sits
-     16.5px below the other four and the cup 6px above. Both remain a one-number
-     change if that is not the intent.
+     Measured before this pass:
+         bottom edge   [861, 867, 863, 859, 865, 861]   8px spread
+         visual centre [336.7, 336.2, 330.4, 334.4, 346.2, 331.6]   15.8px spread
+         plinth centre 326  — so every item sat right of its own plinth, the
+                             shoe worst at 20px
+
+     Targets: bottom on 861 (the mode), visual centre on the plinth centre 326.
+     The "visual centre" is the intensity-weighted centre of the changed pixels,
+     not the midpoint of the bounding box — for a boat with sails or a shoe with
+     a toe those are not the same thing, and the weighted one is what the eye
+     reads as the middle.
      --------------------------------------------------------------------- */
   { id: 'P6182470191076958758_8735811445333237610',
-    note: 'L1 boat  (was 123; floated 17px high)  -> line 861', anchoredPos: [8, 106] },
+    note: 'L1 boat        bottom 861 -> 861   centre 336.7 -> 326', anchoredPos: [-2.7, 106] },
   { id: '8735811446612019836',
-    note: 'L2 orange                              -> line 861', anchoredPos: [12.2, 109.5] },
+    note: 'L2 orange      bottom 867 -> 861   centre 336.2 -> 326', anchoredPos: [2, 115.5] },
   { id: '1587350453',
-    note: 'L3 watermelon                          -> line 861', anchoredPos: [6, 122.5] },
+    note: 'L3 watermelon  bottom 863 -> 861   centre 330.4 -> 326', anchoredPos: [1.6, 124.5] },
   { id: '873686364',
-    note: 'L4 pumpkin                             -> line 861', anchoredPos: [8, 112.7] },
-
-  /* designer values, God Mode — these override the computed line */
+    note: 'L4 pumpkin     bottom 859 -> 861   centre 334.4 -> 326', anchoredPos: [-0.4, 112.5] },
   { id: '1484843868',
-    note: 'L5 shoe  (designer)                     -> line 877.5', anchoredPos: [14.98, 71],
+    note: 'L5 shoe        bottom 865 -> 861   centre 346.2 -> 326', anchoredPos: [-5.2, 91.5],
     sizeDelta: [634, 423] },
   { id: '1639115993',
-    note: 'L6 cup   (designer)                     -> line 855',   anchoredPos: [6, 100.5],
-    sizeDelta: [634, 423] }
+    note: 'L6 cup         bottom 861 -> 861   centre 331.6 -> 326', anchoredPos: [0.4, 94.5],
+    sizeDelta: [634, 423] },
+
+  /* -------------------------------------------------------------------------
+     4. The decorative item copy under `Start Items`.
+
+     Each level shows a still copy of its item on the plinth until the first
+     instruction finishes and the real, draggable row takes over. Those copies
+     carry their own coordinates and drifted the same way — a 24.5px spread —
+     so the item appeared to hop the moment the row swapped. Same line, same
+     arithmetic.
+     --------------------------------------------------------------------- */
+  { id: '8735811446667022693', note: 'L1 start copy, boat',       anchoredPos: [8, 106] },
+  { id: '8735811444812058264', note: 'L2 start copy, orange',     anchoredPos: [13, 109.5] },
+  { id: '284409989',           note: 'L3 start copy, watermelon', anchoredPos: [6, 122.5] },
+  { id: '1419276867',          note: 'L4 start copy, pumpkin',    anchoredPos: [8, 114.5] },
+  { id: '434464500',           note: 'L5 start copy, shoe',       anchoredPos: [6, 87.5] },
+  { id: '754009483',           note: 'L6 start copy, cup',        anchoredPos: [6, 94.5] },
+
+  /* -------------------------------------------------------------------------
+     5. Level 1 drew the whole balance ~3% smaller than every other level.
+
+     `controller`, `Support base` and both arms are authored 251x291 / 131x158
+     in Level 1, where levels 2-6 AND the tutorial all use 259x300 / 135x163.
+     None of these Images preserve their aspect, so the artwork stretches to the
+     box and Level 1's stand and pan arms rendered visibly smaller. Level 1 is
+     brought onto the majority size.
+
+     Safe to change: every child here has centred anchors and a centred pivot,
+     so growing a parent's box moves its centre nowhere and the pans, needle and
+     beam keep their measured positions.
+     --------------------------------------------------------------------- */
+  { id: '571894881',  note: 'L1 controller   -> match levels 2-6', sizeDelta: [259, 300] },
+  { id: '108770353',  note: 'L1 Support base -> match levels 2-6', sizeDelta: [259, 300] },
+  { id: '1206703791', note: 'L1 left arm     -> match levels 2-6', sizeDelta: [135, 163] },
+  { id: '1896114757', note: 'L1 right arm    -> match levels 2-6', sizeDelta: [135, 163] },
+
+  /* -------------------------------------------------------------------------
+     6. The two drop zones, again Level 1 only.
+
+     These are the alpha-0 Images that items and blocks are parented into, so
+     although nothing draws them they decide where everything lands inside the
+     bowl. Level 1 authored the left one at [4.601, 128] / 282.797x95 and the
+     right at [0, 124], where levels 2-6 AND the tutorial use [8.25, 98] / 250x95
+     and [0, 98]. A dropped item therefore sat ~30 units higher in the bowl in
+     Level 1 than anywhere else. Brought onto the shared value.
+     --------------------------------------------------------------------- */
+  { id: '357859291',  note: 'L1 left drop zone  -> match levels 2-6 + tutorial',
+    anchoredPos: [8.25, 98], sizeDelta: [250, 95] },
+  { id: '1007664004', note: 'L1 right drop zone -> match levels 2-6 + tutorial',
+    anchoredPos: [0, 98] },
+
+  /* -------------------------------------------------------------------------
+     7. The guidance arrow's target marker.
+
+     `GameObject` inside the left drop zone is what the dotted arrow aims at.
+     It was authored at three different heights — y 30 in Level 1, 80 in levels
+     2, 5 and 6, and 100 in levels 3 and 4 — so the arrowhead pointed at a
+     different part of the bowl depending on the level. All six use the majority
+     value.
+     --------------------------------------------------------------------- */
+  { id: '1673286253',  note: 'L1 arrow target (was 30)',  anchoredPos: [0, 80] },
+  { id: '1720261514',  note: 'L2 arrow target',           anchoredPos: [0, 80] },
+  { id: '717215848',   note: 'L3 arrow target (was 100)', anchoredPos: [0, 80] },
+  { id: '1318447100',  note: 'L4 arrow target (was 100)', anchoredPos: [0, 80] },
+  { id: '1137182624',  note: 'L5 arrow target',           anchoredPos: [0, 80] },
+  { id: '1624096888',  note: 'L6 arrow target',           anchoredPos: [0, 80] }
 ];
 
 /* Applied by Game.loadScene(). Kept as a plain function on window so deleting
