@@ -18,8 +18,8 @@ Unticked boxes say why.
 | `round5` | idle-only hints, tutorial drag integrity | **9** checks, 0 fail |
 | `tuttilt` | tutorial balance, per block | **8** checks, 0 fail |
 | `fix3` | sample-block affordance, God Mode reversibility | **6** checks, 0 fail |
-| `consistency` | the same value compared across all six levels + tutorial | **45** checks, 0 fail |
-| | | **459 checks, 0 failures** |
+| `consistency` | the same value compared across all six levels + tutorial | **44** checks, 0 fail |
+| | | **458 checks, 0 failures** |
 
 Viewports: 1280×720 · 1366×768 · 1920×1080 · 1024×768 · 1440×900 · 1600×900 ·
 2560×1080 · 1180×820 · 820×1180 · 844×390 · 915×412 · 667×375 · 653×280.
@@ -148,19 +148,44 @@ it catches a level that is subtly different from its siblings.
 * [x] Every instruction line still has a voice-over. — *55 lines*
 * [x] No console errors and no failed requests across the whole pass.
 
-### The item on its plinth
+### The item on its plinth — measured from the rendered frame
 
-Measured from each sprite's own alpha, because the six boxes differ in size and
-padding — box bottoms say nothing about whether an item looks like it is standing.
+Each level was screenshotted twice, once with the item shown and once with it
+hidden; the pixels that changed between the two **are** the item and nothing
+else. Measured at 1920×1080 so one screen pixel is one stage unit
+(`diffmeasure.js`).
 
-* [x] Levels 1–4 share one line. — *stage y **861**, ±0px. They spanned 33.5px before: the boat floated 17px high, and level 4's pumpkin sat 1.8px off*
-* [x] Levels 5 and 6 use designer values supplied from God Mode. — *L5 shoe `14.98, 71` → line 877.5; L6 cup `6, 100.5` → line 855*
-* [ ] All six on one line. — **not done, deliberately.** The two designer values put the shoe 16.5px below the group and the cup 6px above it. A designer judging each shape beats one arithmetic rule here, so the supplied values win; both are a one-number change in `js/layout-overrides.js` if the group line is wanted instead.
+This replaced an earlier arithmetic approach on the sprites' alpha, which was
+**wrong**: it reported all six on one line while the rendered frame still showed
+an 8px spread, because the artwork has soft edges the alpha threshold missed.
+
+| | before | after |
+|---|---|---|
+| bottom edge | 861, 867, 863, 859, 865, 861 | **861** in all six |
+| | 8px spread | **0px** |
+| visual centre | 336.7, 336.2, 330.4, 334.4, 346.2, 331.6 | 325.6 – 326.4 |
+| | 15.8px spread | **0.8px** |
+
+* [x] All six items rest on one line. — *stage y **861**, ±0px*
+* [x] All six are centred on their plinth. — *plinth centre is 326; every item's visual centre now lands 325.6–326.4*
+* [x] Centring uses the intensity-weighted centre, not the bounding box. — *for a boat with sails on one side and a hull on the other those differ by 17px, and the weighted one is what reads as the middle*
+* [x] The `Start Items` decorative copies share the same line. — *they had drifted 24.5px, so the item hopped the moment the real row took over*
+* [ ] Level 5 and 6 keep the values supplied from God Mode. — **superseded, flagged.** The supplied `14.98, 71` put the shoe 20px right of its plinth and 16.5px below the group; `6, 100.5` put the cup 6px above it. The measurement won. Each is one number in `js/layout-overrides.js` if either look was deliberate.
 
 ### Where corrections live
 
 * [x] `js/layout-overrides.js`, not in generated data. — *`js/data.js` stays machine-written; deleting the one file drops every override*
-* [x] Values are exactly what the God Mode panel reports, so they can be pasted in.
+* [x] Every value carries the measurement it came from in a comment beside it.
+
+### Level 1 was the odd one out three more times
+
+Found by matching **every** node across the six levels by its path, not by
+picking nodes to check.
+
+* [x] The balance is the same size in every level. — *`controller`, `Support base` and both pan arms are authored 251×291 / 131×158 in Level 1 where levels 2–6 **and the tutorial** use 259×300 / 135×163. None of these images preserve aspect, so Level 1 drew the whole balance ~3% smaller*
+* [x] Both drop zones match. — *L1's left zone was `[4.601, 128]` at 282.8×95 against `[8.25, 98]` at 250×95 everywhere else, and its right zone y 124 against 98, so a dropped item sat ~30 units higher in the bowl than in any other level*
+* [x] The arrow's target marker is the same everywhere. — *it was y 30 in L1, 80 in L2/L5/L6 and 100 in L3/L4, so the arrowhead pointed at a different part of the bowl per level. All six now use 80*
+* [x] What still differs between levels is only what should. — *the alpha-0 block-slot markers (each level's own pile for its own block count and artwork) and the item boxes' sizes (different sprites). Their x is superseded by `pileSlot` anyway*
 
 ### Pile centring
 
