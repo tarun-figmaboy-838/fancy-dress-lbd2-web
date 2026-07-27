@@ -18,7 +18,8 @@ Unticked boxes say why.
 | `round5` | idle-only hints, tutorial drag integrity | **9** checks, 0 fail |
 | `tuttilt` | tutorial balance, per block | **8** checks, 0 fail |
 | `fix3` | sample-block affordance, God Mode reversibility | **6** checks, 0 fail |
-| | | **414 checks, 0 failures** |
+| `consistency` | the same value compared across all six levels + tutorial | **45** checks, 0 fail |
+| | | **459 checks, 0 failures** |
 
 Viewports: 1280×720 · 1366×768 · 1920×1080 · 1024×768 · 1440×900 · 1600×900 ·
 2560×1080 · 1180×820 · 820×1180 · 844×390 · 915×412 · 667×375 · 653×280.
@@ -115,11 +116,60 @@ Viewports: 1280×720 · 1366×768 · 1920×1080 · 1024×768 · 1440×900 · 160
 * [x] It backs off. — *8 s, then 12 s, up to 22 s if nothing is appropriate*
 * [x] Resets between levels and scenes.
 
-## 10 · Alignment
+## 10 · Alignment and cross-level consistency
 
-* [x] Level 5 item corrected to the supplied value. — *`anchoredPos 14.98, 71`, `sizeDelta 634×423`, verified live. The node is named "Watermelon" in the scene but carries the shoe artwork — a stale name from a duplicated object in the original project*
-* [x] Corrections live in `js/layout-overrides.js`, not in generated data. — *`js/data.js` stays machine-written; deleting the one file drops every override*
-* [x] Values are the ones God Mode reports, so they can be copied straight in.
+Run: `consistency` — **45 checks, 0 failures.** Every check compares a value
+across all six levels and fails on *deviation*, not on an absolute threshold, so
+it catches a level that is subtly different from its siblings.
+
+### Identical in all six levels (measured, stage space)
+
+* [x] The `+` button. — *was x 715–726, y −63 to −69; now ±0*
+* [x] The `−` button. — *was x 495–501, y −67 to −72.5; now ±0*
+* [x] Check, Next, Try Again — position and size. — *±0, and all three the same size*
+* [x] The instruction bar. — *±0, and identical to the tutorial's*
+* [x] The balance beam. — *±0*
+* [x] The needle. — *was ±4.9 because Level 1 alone used `[0, 26]` while the other five and the tutorial used `[-4.9, 24.7]`; now ±0*
+* [x] The needle pivot. — *`0.5,0.5`, origin `43.5px 48.5px`, identical everywhere*
+* [x] Both pans, horizontally and vertically. — *±0*
+* [x] The sample block beside the buttons. — *±1.2px*
+* [x] The balance's pose for a given tilt. — *identical numbers at −1, −0.5, 0, +0.5, +1 in all six*
+* [x] Tilt 0 is exactly level, needle upright. — *18/18, 0°, all six*
+* [x] The guidance arrow: 35 dots, 35 glow twins, one guide element, 26 hand keyframes. — *identical in all six*
+* [x] The arrow's ends. — *tail within 2.4px of the item, head within 8.3px of the pan, all six*
+* [x] The placed item's offset from its pan centre. — *max |dx| 0.01px*
+* [x] Block size vs the sample. — *matches in all six; all blocks in a pan equal*
+* [x] Pan rows evenly spaced **and centred**. — *every row, every level*
+* [x] The correct count is reachable and reads Correct. — *4, 4, 7, 6, 6, 7*
+* [x] Weights match and the balance settles level on success. — *all six*
+* [x] One celebration, one confetti layer. — *all six*
+* [x] Too few blocks reads `Less`, offers Try Again, never celebrates. — *all six*
+* [x] Try Again clears blocks and state together, with no stuck lock. — *0/0 in all six*
+* [x] Every instruction line still has a voice-over. — *55 lines*
+* [x] No console errors and no failed requests across the whole pass.
+
+### The item on its plinth
+
+Measured from each sprite's own alpha, because the six boxes differ in size and
+padding — box bottoms say nothing about whether an item looks like it is standing.
+
+* [x] Levels 1–4 share one line. — *stage y **861**, ±0px. They spanned 33.5px before: the boat floated 17px high, and level 4's pumpkin sat 1.8px off*
+* [x] Levels 5 and 6 use designer values supplied from God Mode. — *L5 shoe `14.98, 71` → line 877.5; L6 cup `6, 100.5` → line 855*
+* [ ] All six on one line. — **not done, deliberately.** The two designer values put the shoe 16.5px below the group and the cup 6px above it. A designer judging each shape beats one arithmetic rule here, so the supplied values win; both are a one-number change in `js/layout-overrides.js` if the group line is wanted instead.
+
+### Where corrections live
+
+* [x] `js/layout-overrides.js`, not in generated data. — *`js/data.js` stays machine-written; deleting the one file drops every override*
+* [x] Values are exactly what the God Mode panel reports, so they can be pasted in.
+
+### Pile centring
+
+* [x] A partly-filled top row is centred on **its own occupancy**, not the row's capacity. — *with 4 blocks in a 3+2 pile the single top block used to hang half a step off-centre; the pile now re-centres, easing over 0.18s, whenever a block is added or removed*
+
+### Tutorial vs levels
+
+* [x] Instruction bar and Check are in the same place. — *d = 0*
+* [x] The balance is within 8.5px. — *the tutorial scene authors `controller` at a slightly different size; noted, not corrected, because it is the authored scene*
 
 ## 11 · Celebration
 

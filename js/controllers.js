@@ -644,47 +644,64 @@ var Controllers = (function () {
      ---------------------------------------------------------------------- */
   var rowCache = {};
 
-  function tidySlots(targetIds, panId) {
+  /* The row structure a level ships: how many blocks belong on each shelf of the
+     pile and how far apart, read from the authored slots and evened out. */
+  function rowPlan(targetIds) {
     var key = (targetIds || []).join('|');
     if (rowCache[key]) return rowCache[key];
     var pts = (targetIds || []).map(function (id) {
       var n = E.node(id);
-      return n ? { id: String(id), x: n.anchoredPos[0], y: n.anchoredPos[1] } : null;
+      return n ? { x: n.anchoredPos[0], y: n.anchoredPos[1] } : null;
     }).filter(Boolean);
-    if (!pts.length) return (rowCache[key] = {});
+    if (!pts.length) return (rowCache[key] = []);
 
     // group into rows by y; authored rows are ~90 px apart, jitter is under 20
     var rows = [];
     pts.slice().sort(function (a, b) { return a.y - b.y; }).forEach(function (p) {
       var row = rows[rows.length - 1];
-      if (row && Math.abs(p.y - row.y) <= 45) { row.items.push(p); row.y = (row.y + p.y) / 2; }
-      else rows.push({ y: p.y, items: [p] });
+      if (row && Math.abs(p.y - row.y) <= 45) { row.xs.push(p.x); row.y = (row.y + p.y) / 2; }
+      else rows.push({ y: p.y, xs: [p.x] });
     });
 
-    var out = {};
-    rows.forEach(function (row) {
-      // keep the row's own left-to-right order, then space it evenly
-      row.items.sort(function (a, b) { return a.x - b.x; });
-      var n = row.items.length;
-      var span = 0;
-      if (n > 1) {
-        var lo = row.items[0].x, hi = row.items[n - 1].x;
-        span = hi - lo;                       // honour the authored row width
-      }
-      var step = n > 1 ? span / (n - 1) : 0;
-      var mid = (n - 1) / 2;
-      row.items.forEach(function (p, i) {
-        out[p.id] = [+((i - mid) * step).toFixed(2), +row.y.toFixed(2)];
-      });
+    var plan = rows.map(function (row) {
+      row.xs.sort(function (a, b) { return a - b; });
+      var n = row.xs.length;
+      var span = n > 1 ? row.xs[n - 1] - row.xs[0] : 0;
+      return { y: +row.y.toFixed(2), cap: n,
+               step: n > 1 ? +(span / (n - 1)).toFixed(3) : 0 };
     });
-    rowCache[key] = out;
-    return out;
+    rowCache[key] = plan;
+    return plan;
   }
 
-  /* the tidied anchoredPos for one slot, or null to use the authored one */
-  function tidySlotPos(targetIds, targetId, panId) {
-    var t = tidySlots(targetIds, panId);
-    return t[String(targetId)] || null;
+  /* Where block `index` of `count` sits.
+
+     Rows fill from the bottom up, and each row is centred on **how many blocks
+     are actually in it**, not on its capacity. Centring on capacity left a
+     partly-filled top row hanging off to one side — with 4 blocks in a 3+2 pile
+     the single top block sat half a step left of centre. */
+  function pileSlot(targetIds, index, count) {
+    var plan = rowPlan(targetIds);
+    if (!plan.length) return null;
+    var left = count, fill = [];
+    for (var i = 0; i < plan.length; i++) {
+      var take = Math.max(0, Math.min(plan[i].cap, left));
+      fill.push(take);
+      left -= take;
+    }
+    // anything beyond the planned capacity joins the top row
+    if (left > 0) fill[fill.length - 1] += left;
+
+    var acc = 0;
+    for (var r = 0; r < plan.length; r++) {
+      if (index < acc + fill[r]) {
+        var k = index - acc, n = fill[r], mid = (n - 1) / 2;
+        var step = plan[r].step || (plan[0].step || 0);
+        return [+((k - mid) * step).toFixed(2), plan[r].y];
+      }
+      acc += fill[r];
+    }
+    return [0, plan[plan.length - 1].y];
   }
 
   function itemWeightOf(itemId, gm) {
@@ -1035,11 +1052,14 @@ var Controllers = (function () {
       self.spawned.push(id);
       var tp = (f.cubeTargetPositions || [])[index];
       sizeBlockForSlot(id, tp, null);
-      if (tp) {
-        var tidy = tidySlotPos(f.cubeTargetPositions, tp, f.basket);
-        if (tidy) E.setAnchoredPos(id, tidy[0], tidy[1]);
-        else { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
-      }
+      if (tp) { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
+      // even, centred rows for however many blocks are down so far
+      var pos = pileSlot(f.cubeTargetPositions, index, index + 1);
+      if (pos) E.setAnchoredPos(id, pos[0], pos[1]);
+      self.spawned.slice(0, index).forEach(function (prev, i) {
+        var q = pileSlot(f.cubeTargetPositions, i, index + 1);
+        if (q) E.setAnchoredPos(prev, q[0], q[1]);
+      });
       E.setScale(id, 0);
       doScale(id, 1, 0.3, 'OutBack', tok);
       return E.wait(0.3, tok);
@@ -1519,6 +1539,26 @@ var Controllers = (function () {
       tiltRunner.stop('tilt');
       setTilt(self.scaleState.balanceValue);
     };
+    /* Re-centre the whole pile for the number of blocks now in it. Existing
+       blocks glide the small distance rather than snapping, so adding one never
+       makes the others jump. */
+    function relayoutPile(skipId) {
+      var ids = self.spawnedCubes.filter(Boolean);
+      var slots = self.currentTargetPoints || [];
+      ids.forEach(function (id, i) {
+        var pos = pileSlot(slots, i, ids.length);
+        if (!pos) return;
+        if (String(id) === String(skipId)) { E.setAnchoredPos(id, pos[0], pos[1]); return; }
+        var from = E.getAnchoredPos(id);
+        if (Math.abs(from[0] - pos[0]) < 0.05 && Math.abs(from[1] - pos[1]) < 0.05) return;
+        E.tween(0.18, 'OutCubic', function (u) {
+          E.setAnchoredPos(id, from[0] + (pos[0] - from[0]) * u,
+                               from[1] + (pos[1] - from[1]) * u);
+        });
+      });
+    }
+    self.relayoutPile = relayoutPile;
+
     /* record a cube in the state without touching the DOM */
     function noteCube(id, add) {
       var side = self.isItemOnLeft ? 'right' : 'left';
@@ -1636,18 +1676,15 @@ var Controllers = (function () {
         var tp = self.currentTargetPoints[self.cubeIndex];
         // size before positioning: setStagePos measures from the final box
         sizeBlockForSlot(id, tp, f.normalCubeSprite);
-        if (tp) {
-          // even, centred rows instead of the authored hand-nudged scatter
-          var tidy = tidySlotPos(self.currentTargetPoints, tp, self.activeCubeBasket);
-          if (tidy) E.setAnchoredPos(id, tidy[0], tidy[1]);
-          else { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
-        }
+        if (tp) { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
         E.setScale(id, 0);
         doScale(id, 1, 0.3, 'OutBack', tok);
         self.spawnedCubes[self.cubeIndex] = id;
         self.cubeIndex++;
         noteCube(id, true);
         if (f.normalCubeSprite) E.setSprite(id, f.normalCubeSprite);
+        // even, centred rows instead of the authored hand-nudged scatter
+        relayoutPile(id);
       }
       return E.wait(0.3, tok).then(function () {
         updateScaleDynamically();
@@ -1682,6 +1719,7 @@ var Controllers = (function () {
           noteCube(id, false);
           E.destroy(id);
           self.spawnedCubes[removeIndex] = null;
+          relayoutPile();            // the pile re-centres for what is left
           self.lastResult = 'None';
           E.setActive(f.checkButton, self.cubeIndex > 0);
           updateScaleDynamically();
