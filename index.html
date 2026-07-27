@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#101820">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="description" content="The Fancy Dress Competition — a balance-scale counting game for young learners.">
+<title>The Fancy Dress Competition — How Many Blocks?</title>
+<link rel="icon" href="favicon.png">
+<link rel="preload" as="font" type="font/ttf" href="assets/fonts/LilitaOne-Regular.ttf" crossorigin>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Boot screen. Styled inline so it paints on the very first frame, before
+     style.css has arrived, and can never flash the empty stage underneath. -->
+<div id="boot" style="position:fixed;inset:0;z-index:9000;display:flex;align-items:center;
+     justify-content:center;background:#12303a;color:#eaf6ff;font-family:system-ui,sans-serif">
+  <div style="text-align:center;padding:24px;max-width:min(90vw,420px)">
+    <div id="bootRing"><i></i><i></i><i></i></div>
+    <p id="bootTitle">The Fancy Dress Competition</p>
+    <div id="bootTrack"><div id="bootBar"></div></div>
+    <p id="bootPct">Loading…</p>
+  </div>
+</div>
+
+<!-- Shown only on a portrait phone: the board is authored 16:9. -->
+<div id="rotate" hidden>
+  <div class="rotate-phone"></div>
+  <p>Turn your device sideways to play</p>
+</div>
+
+<div id="game"></div>
+
+<script src="js/data.js"></script>
+<script src="js/engine.js"></script>
+<script src="js/controllers.js"></script>
+<script src="js/main.js"></script>
+
+<!-- God Mode: developer / design-review layer. Delete these five tags to ship
+     the learner build; nothing else changes. Press Shift + G to open it. -->
+<link rel="stylesheet" href="god-mode/god-mode.css">
+<script src="god-mode/god-mode-utils.js"></script>
+<script src="god-mode/god-mode-live-editor.js"></script>
+<script src="god-mode/god-mode-qa.js"></script>
+<script src="god-mode/god-mode.js"></script>
+</body>
+</html>

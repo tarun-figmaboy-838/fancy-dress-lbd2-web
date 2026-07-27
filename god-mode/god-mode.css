@@ -1,0 +1,198 @@
+/* ============================================================================
+ *  god-mode.css — self-contained styles for the God Mode debug layer.
+ *  Every panel is position:fixed and lives outside the scaled #stage, so it
+ *  stays crisp at any letterbox scale. Nothing here applies unless <body> has
+ *  the .godMode class, except the panel's own hidden state.
+ * ========================================================================== */
+:root {
+  --godAccent:  #3DF5C4;
+  --godAccent2: #7C6BFF;
+  --godPink:    #FF6FD8;
+  --godInk:     #EAF6FF;
+  --godMuted:   rgba(190,215,230,.62);
+  --godGlass:   rgba(18,24,34,.9);
+  --godGlassHi: rgba(40,52,72,.6);
+  --godLine:    rgba(120,170,200,.18);
+}
+
+/* Hidden by default and only ever revealed under body.godMode. Each rule below
+   re-states `display: none` so a later layout rule can never leak the panel
+   into the learner build. */
+#godBadge, #godSelBox, #godToast { display: none; }
+
+body.godMode #godBadge { display: block; }
+
+/* ------------------------------------------------------------------ badge -- */
+#godBadge {
+  position: fixed; left: 14px; top: 12px; z-index: 100001;
+  font: 700 12px/1 ui-monospace, Menlo, Consolas, monospace;
+  letter-spacing: .12em;
+  color: #071018;
+  background: linear-gradient(90deg, var(--godAccent), var(--godAccent2));
+  padding: 7px 12px; border-radius: 999px;
+  box-shadow: 0 0 0 1px rgba(255,255,255,.25), 0 6px 22px rgba(60,245,196,.35);
+  animation: godPulse 2.2s ease-in-out infinite;
+  pointer-events: none;
+}
+@keyframes godPulse { 0%,100% { opacity: .78; } 50% { opacity: 1; } }
+
+/* ------------------------------------------------------------------ panel -- */
+#godPanel {
+  display: none;
+  position: fixed; right: 14px; top: 12px; z-index: 100000;
+  width: 372px; max-height: calc(100vh - 24px);
+  flex-direction: column;
+  font: 12px/1.45 ui-sans-serif, system-ui, "Segoe UI", sans-serif;
+  color: var(--godInk);
+  background: var(--godGlass);
+  backdrop-filter: blur(14px) saturate(1.3);
+  border: 1px solid var(--godLine);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgba(0,0,0,.55);
+  overflow: hidden;
+}
+#godHeader {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 9px 12px; cursor: grab;
+  background: linear-gradient(90deg, rgba(60,245,196,.16), rgba(124,107,255,.18));
+  border-bottom: 1px solid var(--godLine);
+  user-select: none;
+}
+#godHeader.grabbing { cursor: grabbing; }
+.godTitle { font-weight: 700; letter-spacing: .04em; }
+#godMin {
+  width: 22px; height: 22px; line-height: 18px;
+  border-radius: 6px; border: 1px solid var(--godLine);
+  background: var(--godGlassHi); color: var(--godInk); cursor: pointer;
+}
+body.godMode #godPanel { display: flex; }
+
+#godBody { overflow: auto; padding: 4px 12px 12px; }
+#godPanel.min #godBody { display: none; }
+
+#godBody::-webkit-scrollbar { width: 9px; }
+#godBody::-webkit-scrollbar-thumb {
+  background: rgba(124,170,200,.3); border-radius: 9px;
+}
+
+#godBody section { padding: 10px 0; border-bottom: 1px solid var(--godLine); }
+#godBody section:last-child { border-bottom: 0; }
+#godBody h4 {
+  margin: 0 0 8px; font-size: 11px; letter-spacing: .14em;
+  text-transform: uppercase; color: var(--godAccent);
+  display: flex; justify-content: space-between; gap: 8px; align-items: baseline;
+}
+#godBody h4 em {
+  font-style: normal; text-transform: none; letter-spacing: 0;
+  color: var(--godMuted); font-size: 11px; font-weight: 400;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 190px;
+}
+
+.godRow { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 5px; align-items: center; }
+.godRow.godLevels button { min-width: 34px; }
+.godLabel { color: var(--godMuted); min-width: 54px; }
+
+#godPanel button {
+  font: inherit; padding: 5px 9px; border-radius: 7px;
+  border: 1px solid var(--godLine); background: var(--godGlassHi);
+  color: var(--godInk); cursor: pointer;
+}
+#godPanel button:hover { border-color: var(--godAccent); color: #fff; }
+#godPanel button:active { transform: translateY(1px); }
+#godPanel button.on { background: var(--godAccent); color: #071018; border-color: transparent; }
+
+#godPanel select, #godPanel input[type=number] {
+  font: inherit; color: var(--godInk);
+  background: rgba(8,12,18,.75);
+  border: 1px solid var(--godLine); border-radius: 7px; padding: 4px 6px;
+}
+#godPick { flex: 1; min-width: 0; }
+.godToggles label { display: flex; align-items: center; gap: 5px; color: var(--godMuted); }
+
+.godGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin: 6px 0; }
+.godGrid label {
+  display: flex; align-items: center; gap: 6px;
+  color: var(--godMuted); font-variant-numeric: tabular-nums;
+}
+.godGrid input { flex: 1; min-width: 0; }
+.godHint { margin: 4px 0 8px; color: var(--godMuted); font-size: 11px; }
+
+#godQaOut {
+  margin: 6px 0 0; max-height: 190px; overflow: auto;
+  font: 11px/1.5 ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre-wrap; word-break: break-word;
+  background: rgba(6,10,16,.7); border: 1px solid var(--godLine);
+  border-radius: 8px; padding: 8px;
+}
+.godQa-pass { color: #6ff0b8; }
+.godQa-fail { color: #ff8a8a; }
+.godQa-warn { color: #ffd479; }
+.godQa-head { color: var(--godAccent2); font-weight: 700; margin-top: 4px; }
+
+/* -------------------------------------------------------------- selection -- */
+body.godMode #godSelBox { display: block; }
+#godSelBox {
+  position: fixed; z-index: 99998; pointer-events: none;
+  outline: 2px solid var(--godPink);
+  box-shadow: 0 0 0 1px rgba(0,0,0,.35), 0 0 22px rgba(255,111,216,.35);
+}
+#godSelLabel {
+  position: absolute; left: 0; top: -20px; white-space: nowrap;
+  font: 700 10px/16px ui-monospace, Menlo, Consolas, monospace;
+  background: var(--godPink); color: #180512;
+  padding: 1px 6px; border-radius: 4px;
+}
+.godHandle {
+  position: absolute; width: 10px; height: 10px; margin: -5px;
+  background: #fff; border: 2px solid var(--godPink); border-radius: 2px;
+  pointer-events: auto;
+}
+body.godCursorEdit #godSelBox .godHandle { pointer-events: auto; }
+.godHandle[data-h=nw] { left: 0;    top: 0;    cursor: nwse-resize; }
+.godHandle[data-h=n]  { left: 50%;  top: 0;    cursor: ns-resize; }
+.godHandle[data-h=ne] { left: 100%; top: 0;    cursor: nesw-resize; }
+.godHandle[data-h=w]  { left: 0;    top: 50%;  cursor: ew-resize; }
+.godHandle[data-h=e]  { left: 100%; top: 50%;  cursor: ew-resize; }
+.godHandle[data-h=sw] { left: 0;    top: 100%; cursor: nesw-resize; }
+.godHandle[data-h=s]  { left: 50%;  top: 100%; cursor: ns-resize; }
+.godHandle[data-h=se] { left: 100%; top: 100%; cursor: nwse-resize; }
+
+body.godCursorEdit #game { cursor: crosshair; }
+
+/* ------------------------------------------------------------ visual debug -- */
+body.godShowBounds .un { outline: 1px solid rgba(60,245,196,.35); }
+body.godShowBounds .un.btn { outline-color: rgba(255,111,216,.6); }
+body.godShowBounds .un.tmp { outline-color: rgba(255,212,121,.6); }
+
+body.godShowSafe #stage::after {
+  content: ''; position: absolute; left: 5%; top: 5%; right: 5%; bottom: 5%;
+  border: 2px dashed rgba(60,245,196,.55); pointer-events: none; z-index: 99;
+}
+body.godShowGrid #stage::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none; z-index: 98;
+  background:
+    repeating-linear-gradient(to right,  rgba(255,255,255,.10) 0 1px, transparent 1px 100px),
+    repeating-linear-gradient(to bottom, rgba(255,255,255,.10) 0 1px, transparent 1px 100px),
+    linear-gradient(to right, transparent calc(50% - 1px), rgba(255,111,216,.5) 50%, transparent calc(50% + 1px)),
+    linear-gradient(to bottom, transparent calc(50% - 1px), rgba(255,111,216,.5) 50%, transparent calc(50% + 1px));
+}
+body.godShowAnchors .un::after {
+  content: ''; position: absolute; left: 50%; top: 50%;
+  width: 7px; height: 7px; margin: -3.5px;
+  border-radius: 50%; background: rgba(124,107,255,.85); pointer-events: none;
+}
+body.godPauseAnimations *, body.godPauseAnimations *::before, body.godPauseAnimations *::after {
+  animation-play-state: paused !important;
+}
+
+/* ------------------------------------------------------------------ toast -- */
+body.godMode #godToast { display: block; }
+#godToast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%) translateY(14px);
+  z-index: 100002; pointer-events: none; opacity: 0;
+  font: 12px/1 ui-sans-serif, system-ui, sans-serif;
+  color: #071018; background: var(--godAccent);
+  padding: 9px 15px; border-radius: 999px;
+  transition: opacity .18s ease, transform .18s ease;
+}
+#godToast.show { opacity: 1; transform: translateX(-50%) translateY(0); }

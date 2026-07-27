@@ -1,0 +1,395 @@
+/* Fancy Dress Lbd1 — static web build */
+@font-face {
+  font-family: 'Lilita One';
+  src: url('../assets/fonts/LilitaOne-Regular.ttf') format('truetype');
+  font-weight: 400;
+  font-display: block;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0; padding: 0;
+  height: 100%;
+  height: 100dvh;                 /* survives the mobile URL bar collapsing */
+  background: #12303a;            /* letterbox bars, tinted to the artwork */
+  overflow: hidden;
+  overscroll-behavior: none;      /* no pull-to-refresh, no rubber-banding */
+  -webkit-tap-highlight-color: transparent;
+  -webkit-text-size-adjust: 100%;
+  touch-action: none; user-select: none; -webkit-user-select: none;
+}
+
+#game {
+  position: fixed;
+  inset: 0;
+  overflow: hidden;
+  /* keep the board clear of notches and rounded corners */
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+
+/* the Unity Canvas: sized to screen/scaleFactor, then scaled to fill */
+#stage {
+  position: absolute;
+  left: 50%; top: 50%;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+
+/* every GameObject with a RectTransform */
+.un {
+  position: absolute;
+  transform-origin: 50% 50%;
+  background-repeat: no-repeat;
+}
+
+/* Image.sprite + Image.color.a live here, never on .un itself: CSS opacity
+   cascades to children but Unity's Image tint does not. Painted first, so the
+   parent Graphic sits below its child objects exactly as Unity draws it. */
+.un-bg {
+  position: absolute;
+  inset: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  pointer-events: none;
+}
+
+/* Image.raycastPadding — the real pointer target */
+.hit { position: absolute; }
+
+/* TextMeshPro: .tmp-inner is the text area produced by the TMP margins,
+   which are frequently negative and so extend past the RectTransform. */
+.un.tmp { overflow: visible; }
+.tmp-inner { position: absolute; display: flex; }
+.tmp-text { display: block; width: 100%; }
+
+/* ---- pointer affordances ------------------------------------------------ *
+ * Anything tappable reads as tappable and anything draggable reads as
+ * draggable, including through the inset .hit target that Image.raycastPadding
+ * creates (cursor is not inherited onto a child that sets its own, so the hit
+ * element is given the same one). */
+.un.btn, .un.btn > .hit { cursor: pointer; }
+.un.btn.nointeract, .un.btn.nointeract > .hit { cursor: default; }
+
+/* A display-only sample (the block shown beside the +/- buttons) keeps its
+   scene Button component but has no listener, so it must not promise a tap. */
+.un.sample, .un.sample > .hit { cursor: default; }
+
+/* A draggable item: open hand at rest, closed hand while it is being moved.
+   The :not() keeps this at the same specificity as .un.btn.nointeract — the
+   items carry a Button that starts non-interactable, and dragging them is
+   still the whole point, so the drag affordance has to win until the item is
+   actually spent. */
+.un.draggable:not(.nodrag),
+.un.draggable:not(.nodrag) > .hit { cursor: grab; }
+.un.draggable.dragging,
+.un.draggable.dragging > .hit { cursor: grabbing; }
+.un.draggable.nodrag,
+.un.draggable.nodrag > .hit { cursor: default; }
+body.dragging, body.dragging * { cursor: grabbing !important; }
+
+/* Button ColorTint transition approximation on press */
+.un.btn.pressed { filter: brightness(0.92); }
+
+/* ========================================================================= *
+ *  Boot screen
+ *  One calm screen that holds until every sprite is decoded, so the game
+ *  never appears half-dressed. It fades out and removes itself; nothing here
+ *  is left in the DOM once play starts.
+ * ========================================================================= */
+#boot {
+  position: fixed; inset: 0; z-index: 9000;
+  display: flex; align-items: center; justify-content: center;
+  background: #12303a;
+  color: #eaf6ff;
+  font-family: 'Lilita One', system-ui, sans-serif;
+  transition: opacity .45s ease;
+  padding: env(safe-area-inset-top) env(safe-area-inset-right)
+           env(safe-area-inset-bottom) env(safe-area-inset-left);
+}
+#boot.done { opacity: 0; pointer-events: none; }
+
+#bootTitle {
+  margin: 22px 0 18px;
+  font-size: clamp(19px, 4.2vw, 31px);
+  letter-spacing: .4px;
+  line-height: 1.25;
+  text-shadow: 0 2px 10px rgba(0, 0, 0, .35);
+}
+#bootPct {
+  margin: 12px 0 0;
+  font-size: clamp(12px, 2.4vw, 15px);
+  opacity: .72;
+  letter-spacing: .6px;
+}
+#bootTrack {
+  width: min(70vw, 300px);
+  height: 9px;
+  margin: 0 auto;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, .16);
+  overflow: hidden;
+}
+#bootBar {
+  width: 0%;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(90deg, #4fc3f7, #7ee8c6);
+  transition: width .3s ease;
+}
+
+/* three balls that rock like the balance itself */
+#bootRing { display: flex; gap: 10px; justify-content: center; }
+#bootRing i {
+  width: 14px; height: 14px; border-radius: 50%;
+  background: #ffd23f;
+  display: block;
+  animation: boot-bob 1.05s ease-in-out infinite;
+}
+#bootRing i:nth-child(2) { background: #4fc3f7; animation-delay: .14s; }
+#bootRing i:nth-child(3) { background: #ff8a65; animation-delay: .28s; }
+@keyframes boot-bob {
+  0%, 100% { transform: translateY(0) scale(1); }
+  40%      { transform: translateY(-11px) scale(1.12); }
+}
+
+/* ---- rotate-to-landscape prompt ---------------------------------------- */
+/* The board is authored 16:9. On a portrait phone letterboxing it would leave
+   a postage stamp, so the child is asked to turn the device instead. Tablets
+   in portrait still get the game — there is enough width to be playable. */
+#rotate {
+  position: fixed; inset: 0; z-index: 8500;
+  display: none;
+  align-items: center; justify-content: center;
+  flex-direction: column; gap: 22px;
+  background: #12303a; color: #eaf6ff; text-align: center;
+  font-family: 'Lilita One', system-ui, sans-serif;
+  padding: 26px;
+}
+#rotate p { margin: 0; font-size: clamp(16px, 4.6vw, 24px); line-height: 1.35; }
+.rotate-phone {
+  width: 58px; height: 96px;
+  border: 4px solid #eaf6ff; border-radius: 11px;
+  animation: rotate-tip 2.1s ease-in-out infinite;
+}
+@keyframes rotate-tip {
+  0%, 30%   { transform: rotate(0deg); }
+  55%, 80%  { transform: rotate(-90deg); }
+  100%      { transform: rotate(-90deg); }
+}
+/* a phone-sized screen held upright */
+@media (orientation: portrait) and (max-width: 820px) {
+  body.ready #rotate { display: flex; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #bootRing i, .rotate-phone { animation: none; }
+}
+
+/* ========================================================================= *
+ *  Guidance layer — dotted path, hand hint, item glow + pop
+ * ========================================================================= */
+
+/* Sits inside #stage, so it letterboxes and scales with the board and every
+   coordinate written into it is plain 1920x1080 design-space px. */
+.fx-layer {
+  position: absolute; inset: 0;
+  pointer-events: none;
+  z-index: 40;
+  overflow: hidden;
+}
+
+/* ---- dotted guidance ---------------------------------------------------- *
+ * The real Vector_10.png arrow, cut into horizontal slices that fade in one
+ * after another from the item end to the arrowhead. Each slice reconstructs
+ * its own strip of the source image, so the artwork is used as authored — the
+ * only thing animated is opacity and transform, which keeps it composited.
+ * A blurred duplicate underneath supplies the soft glow pulse. */
+.dot-guide {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0;
+  transform: scale(.94);
+  transition: opacity .32s ease, transform .32s ease;
+  will-change: transform, opacity;
+}
+.dot-guide.on { opacity: 1; transform: scale(1); }
+
+.dot-guide__glow,
+.dot-guide__path {
+  position: absolute; inset: 0;
+}
+.dot-guide__glow {
+  filter: blur(7px) saturate(1.25);
+  opacity: .55;
+  animation: guide-glow 2.1s ease-in-out infinite;
+  will-change: opacity;
+}
+/* The base dots appear once, tail first, and then stay put — the guidance is
+   always readable. The looping flow lives on the glow layer, so something is
+   always travelling along the path without the dots ever blinking out. */
+.dot-guide__slice {
+  position: absolute;
+  left: 0; right: 0;
+  background-repeat: no-repeat;
+  opacity: 0;
+  transform: translate3d(0, 6px, 0);
+  animation: guide-dot-in .46s ease-out var(--delay, 0s) 1 both;
+  will-change: transform, opacity;
+}
+.dot-guide__glow .dot-guide__slice {
+  animation: guide-dot-flow var(--cycle, 2.1s) ease-out var(--delay, 0s) infinite both;
+}
+
+@keyframes guide-dot-in {
+  from { opacity: 0; transform: translate3d(0, 6px, 0); }
+  to   { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+@keyframes guide-dot-flow {
+  0%        { opacity: 0;  transform: translate3d(0, 4px, 0); }
+  14%       { opacity: .95; transform: translate3d(0, 0, 0); }
+  48%       { opacity: .95; transform: translate3d(0, 0, 0); }
+  76%, 100% { opacity: 0;  transform: translate3d(0, -3px, 0); }
+}
+@keyframes guide-glow {
+  0%, 100% { opacity: .32; }
+  50%      { opacity: .7; }
+}
+
+/* Fallback path drawn in CSS if Vector_10.png ever fails to load. */
+.dot-guide.fallback .dot-guide__slice {
+  background-image: radial-gradient(circle, rgba(160,240,255,.95) 44%, rgba(160,240,255,0) 46%) !important;
+  background-size: 100% 100% !important;
+  background-position: center !important;
+}
+
+/* ---- hand hint ---------------------------------------------------------- *
+ * One preloaded image, moved with transforms only. Never a frame sequence. */
+.hand-hint {
+  position: absolute;
+  left: 0; top: 0;
+  pointer-events: none;
+  opacity: 0;
+  background-repeat: no-repeat;
+  background-position: center;
+  background-size: contain;
+  will-change: transform, opacity;
+  z-index: 2;
+}
+.hand-hint__ripple {
+  position: absolute;
+  left: 50%; top: 62%;
+  width: 74px; height: 74px;
+  margin: -37px 0 0 -37px;
+  border-radius: 50%;
+  border: 4px solid rgba(255, 214, 84, .85);
+  opacity: 0;
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+.hand-hint__ripple.tap { animation: hand-ripple .5s ease-out 1; }
+@keyframes hand-ripple {
+  0%   { opacity: .85; transform: scale(.35); }
+  100% { opacity: 0;   transform: scale(1.5); }
+}
+
+/* Tap loop for the button hints: a soft press, not a 69-frame flipbook.
+   Runs on the sprite layer, never on .un itself — the engine owns that
+   element's transform (the hand prefab is authored at scale 0.3). */
+.un.hand-tap > .un-bg {
+  animation: hand-tap 1.35s cubic-bezier(.36,.07,.25,1) infinite;
+  will-change: transform;
+  transform-origin: 50% 50%;
+}
+@keyframes hand-tap {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  40%      { transform: translate3d(0, 13px, 0) scale(.93, .96); }
+  55%      { transform: translate3d(0, 13px, 0) scale(.93, .96); }
+  74%      { transform: translate3d(0, -4px, 0) scale(1.02, 1.01); }
+}
+
+/* ---- item glow + one-shot pop ------------------------------------------- *
+ * The glow lives on the node element (filter only, so it never touches the
+ * layout transform the engine writes). The pop runs on an inner wrapper, so
+ * scaling can never fight the RectTransform's own scale or position. */
+.un.is-glowing > .un-bg {
+  filter: drop-shadow(0 0 10px rgba(255, 216, 92, .95))
+          drop-shadow(0 0 22px rgba(255, 190, 60, .55));
+  animation: item-glow 1.7s ease-in-out infinite;
+  will-change: filter;
+}
+@keyframes item-glow {
+  0%, 100% { opacity: .88; }
+  50%      { opacity: 1; }
+}
+/* Fires once when the glow state begins, then removes itself. */
+.un.item-pop > .un-bg {
+  animation: item-glow 1.7s ease-in-out infinite, item-pop .46s cubic-bezier(.34,1.56,.64,1) 1;
+}
+@keyframes item-pop {
+  0%   { transform: translate3d(0, 0, 0) scale(.92, .96); }
+  38%  { transform: translate3d(0, -7px, 0) scale(1.08, 1.05); }
+  66%  { transform: translate3d(0, 1px, 0) scale(.985, 1.01); }
+  100% { transform: translate3d(0, 0, 0) scale(1, 1); }
+}
+
+/* ---- reduced motion ------------------------------------------------------ */
+@media (prefers-reduced-motion: reduce) {
+  .dot-guide__slice,
+  .dot-guide__glow,
+  .un.is-glowing > .un-bg,
+  .un.item-pop > .un-bg,
+  .un.hand-tap > .un-bg {
+    animation: none !important;
+  }
+  .dot-guide__slice { opacity: 1; transform: none; }
+  .dot-guide__glow { opacity: .4; }
+  .dot-guide { transition: opacity .2s linear; }
+}
+
+/* ---- celebration confetti shower --------------------------------------- *
+ * Two elements per particle: the outer one falls, the inner one sways and
+ * spins. Both animate transform/opacity only, so the whole shower stays on
+ * the compositor. Particles start above the stage top, so no static row ever
+ * forms along the edge, and the layer clips so nothing can cause scrollbars. */
+.confetti-layer {
+  position: absolute; inset: 0;
+  overflow: hidden; pointer-events: none; z-index: 50;
+}
+.confetti-layer .cf {
+  position: absolute; top: 0; left: 0;
+  will-change: transform, opacity;
+  animation: confetti-fall var(--dur, 2.2s) linear var(--delay, 0s) 1 both;
+}
+.confetti-layer .cf > i {
+  display: block; border-radius: 2px;
+  will-change: transform;
+  animation: confetti-sway var(--sdur, 1s) ease-in-out 0s infinite alternate,
+             confetti-spin calc(var(--sdur, 1s) * 1.7) linear 0s infinite;
+}
+@keyframes confetti-fall {
+  0%   { transform: translate3d(0, var(--y0, -140px), 0); opacity: 0; }
+  9%   { opacity: 1; }
+  86%  { opacity: 1; }
+  100% { transform: translate3d(0, var(--y1, 1180px), 0); opacity: 0; }
+}
+@keyframes confetti-sway {
+  from { transform: translate3d(calc(var(--sway, 40px) * -0.5), 0, 0); }
+  to   { transform: translate3d(var(--sway, 40px), 0, 0); }
+}
+@keyframes confetti-spin {
+  from { rotate: 0deg; }
+  to   { rotate: var(--spin, 360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .confetti-layer .cf > i { animation: none; }
+}
+
+/* ---- missing-asset guard ------------------------------------------------ */
+/* A sprite that fails to load leaves a dashed outline instead of nothing at
+   all, so a broken path is visible in QA rather than silently blank. */
+.assetMissing .un-bg.assetMissing-box {
+  outline: 2px dashed rgba(255, 90, 90, .9);
+  outline-offset: -2px;
+}

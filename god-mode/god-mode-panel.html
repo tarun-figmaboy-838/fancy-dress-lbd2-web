@@ -1,0 +1,132 @@
+<div id="godBadge">⚡ GOD MODE</div>
+
+<div id="godSelBox">
+  <span id="godSelLabel"></span>
+  <i class="godHandle" data-h="nw"></i><i class="godHandle" data-h="n"></i><i class="godHandle" data-h="ne"></i>
+  <i class="godHandle" data-h="w"></i><i class="godHandle" data-h="e"></i>
+  <i class="godHandle" data-h="sw"></i><i class="godHandle" data-h="s"></i><i class="godHandle" data-h="se"></i>
+</div>
+
+<div id="godPanel">
+  <header id="godHeader">
+    <span class="godTitle">God Mode — Layout &amp; QA</span>
+    <button id="godMin" title="minimize">−</button>
+  </header>
+
+  <div id="godBody">
+
+    <section>
+      <h4>Scene flow</h4>
+      <div class="godRow">
+        <button data-act="tutorial">Tutorial</button>
+        <button data-act="lbd2">Lbd2</button>
+        <button data-act="prev">◀ Level</button>
+        <button data-act="next">Level ▶</button>
+        <button data-act="restart">Restart</button>
+      </div>
+      <div class="godRow godLevels">
+        <button data-level="1">1</button><button data-level="2">2</button>
+        <button data-level="3">3</button><button data-level="4">4</button>
+        <button data-level="5">5</button><button data-level="6">6</button>
+      </div>
+      <div class="godRow">
+        <button data-act="revealItem">Reveal item</button>
+        <button data-act="dropLeft">Drop → left</button>
+        <button data-act="dropRight">Drop → right</button>
+        <button data-act="returnItem">Return item</button>
+      </div>
+      <div class="godRow">
+        <button data-act="plus">+ block</button>
+        <button data-act="minus">− block</button>
+        <button data-act="solve">Fill correct</button>
+        <button data-act="check">Check</button>
+        <button data-act="resetCubes">Clear blocks</button>
+      </div>
+      <div class="godRow">
+        <button data-act="showGuide">Show guide</button>
+        <button data-act="hideGuide">Hide guide</button>
+        <button data-act="confetti">Replay confetti</button>
+      </div>
+    </section>
+
+    <section>
+      <h4>Live layout editor <em id="godSelName">nothing selected</em></h4>
+      <div class="godRow">
+        <select id="godPick"></select>
+        <button data-act="rescan" title="rebuild the list from what is on screen">⟳</button>
+      </div>
+      <div class="godRow godToggles">
+        <label><input type="checkbox" id="godCursor"> Cursor edit</label>
+        <label><input type="checkbox" id="godSnap"> Snap 10</label>
+        <label><input type="checkbox" id="godLock"> Lock</label>
+      </div>
+
+      <div class="godGrid">
+        <label>X<input type="number" id="godX" step="1"></label>
+        <label>Y<input type="number" id="godY" step="1"></label>
+        <label>W<input type="number" id="godW" step="1"></label>
+        <label>H<input type="number" id="godH" step="1"></label>
+        <label>aPos X<input type="number" id="godAX" step="1"></label>
+        <label>aPos Y<input type="number" id="godAY" step="1"></label>
+        <label>Scale<input type="number" id="godScale" step="0.01"></label>
+        <label>Rot<input type="number" id="godRot" step="1"></label>
+        <label>Alpha<input type="number" id="godOpacity" step="0.05" min="0" max="1"></label>
+        <label>Order<input type="number" id="godZ" step="1"></label>
+      </div>
+      <p class="godHint">X/Y are design-grid pixels (1920×1080, top-left origin).
+        aPos is the Unity anchoredPos for the same node. Arrow keys nudge 1px,
+        Shift+arrows 10px.</p>
+
+      <div class="godRow">
+        <button data-act="copySel">Copy values</button>
+        <button data-act="copyPatch">Copy patch</button>
+        <button data-act="copyAll">Copy all</button>
+      </div>
+      <div class="godRow">
+        <button data-act="save">Save</button>
+        <button data-act="load">Load</button>
+        <button data-act="clearSaved">Clear saved</button>
+        <button data-act="resetSel">Reset one</button>
+        <button data-act="resetAll">Reset all</button>
+      </div>
+    </section>
+
+    <section>
+      <h4>Visual debug</h4>
+      <div class="godRow godToggles">
+        <label><input type="checkbox" data-cls="godShowBounds"> Bounds</label>
+        <label><input type="checkbox" data-cls="godShowSafe"> Safe area</label>
+        <label><input type="checkbox" data-cls="godShowGrid"> Grid</label>
+        <label><input type="checkbox" data-cls="godShowAnchors"> Anchors</label>
+      </div>
+      <div class="godRow">
+        <span class="godLabel">Speed</span>
+        <button data-speed="0">‖</button><button data-speed="0.25">.25×</button>
+        <button data-speed="0.5">.5×</button><button data-speed="1">1×</button>
+        <button data-speed="2">2×</button>
+      </div>
+      <div class="godRow">
+        <span class="godLabel">Viewport</span>
+        <button data-vp="1280x720">1280×720</button>
+        <button data-vp="1366x768">1366×768</button>
+        <button data-vp="1920x1080">1920×1080</button>
+        <button data-vp="1024x768">1024×768</button>
+      </div>
+    </section>
+
+    <section>
+      <h4>QA</h4>
+      <div class="godRow">
+        <button data-act="qaAll">Run all</button>
+        <button data-act="qaSmoke">Smoke</button>
+        <button data-act="qaAssets">Assets</button>
+        <button data-act="qaPlace">Placement</button>
+        <button data-act="qaScale">Scale</button>
+        <button data-act="qaLayout">Layout</button>
+        <button data-act="qaCopy">Copy report</button>
+      </div>
+      <pre id="godQaOut"></pre>
+    </section>
+
+  </div>
+</div>

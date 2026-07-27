@@ -1,0 +1,46 @@
+# ---- dependencies -----------------------------------------------------------
+node_modules/
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# ---- build / tooling output -------------------------------------------------
+dist/
+build/
+.cache/
+*.tsbuildinfo
+
+# ---- asset conversion leftovers ---------------------------------------------
+# The build ships WebP/OGG only; keep any local originals out of the repo.
+assets/**/*.orig
+assets/_originals/
+*.png.bak
+*.gif.bak
+
+# ---- logs -------------------------------------------------------------------
+*.log
+npm-debug.log*
+yarn-error.log*
+
+# ---- editors / OS -----------------------------------------------------------
+.vscode/
+!.vscode/extensions.json
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# ---- local env --------------------------------------------------------------
+.env
+.env.*
+!.env.example
+
+# ---- test / QA scratch ------------------------------------------------------
+screenshots/
+test-results/
+playwright-report/
+*.screenshot.png

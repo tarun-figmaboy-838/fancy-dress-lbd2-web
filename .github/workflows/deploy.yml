@@ -1,0 +1,60 @@
+name: Deploy to GitHub Pages
+
+# The game is a static build with no toolchain, so "building" is just
+# publishing the folder as-is. Pushing to the default branch puts it live.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Let a running deploy finish; queue at most one more behind it.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Strip the God Mode dev layer from the published build
+        run: |
+          # God Mode is a developer tool; learners should never download it.
+          sed -i '/god-mode\//d' index.html
+          rm -rf god-mode GOD-MODE.md
+          echo "--- shipped index.html ---"
+          cat index.html
+
+      - name: Check every asset a scene references exists
+        run: |
+          node -e "
+            global.window = {};
+            require('./js/data.js');
+            const fs = require('fs');
+            const refs = new Set();
+            (function scan(o) {
+              if (typeof o === 'string') { if (/^assets\//.test(o)) refs.add(o); return; }
+              if (Array.isArray(o)) return o.forEach(scan);
+              if (o && typeof o === 'object') Object.values(o).forEach(scan);
+            })([window.SCENES, window.ANIMS, window.TEMPLATES]);
+            let bad = 0;
+            refs.forEach(r => { if (!fs.existsSync(r)) { console.error('MISSING ' + r); bad++; } });
+            console.log(refs.size + ' asset references, ' + bad + ' missing');
+            if (bad) process.exit(1);
+          "
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: .
+      - id: deployment
+        uses: actions/deploy-pages@v4
