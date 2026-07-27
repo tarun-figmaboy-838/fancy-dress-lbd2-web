@@ -36,6 +36,8 @@ var Game = (function () {
     current = name;
     document.body.dataset.scene = name;
     hideBuildTags();
+    // alignment corrections measured in God Mode, applied before anything shows
+    if (window.applyLayoutOverrides) window.applyLayoutOverrides();
 
     ORDER.forEach(function (sname) {
       (data.scripts[sname] || []).forEach(function (sc) {

@@ -588,10 +588,6 @@ var Engine = (function () {
     n.sizeDelta = [n.image.sprite.w, n.image.sprite.h];
     n.refreshTree();
   }
-  function setImageColor(id, c) {
-    var n = node(id); if (!n || !n.image) return;
-    n.image.color = c.slice(); n.applyImage();
-  }
 
   function setText(id, str) {
     var n = node(id); if (!n || !n.tmp) return;
@@ -998,6 +994,8 @@ var Engine = (function () {
     var i;
     for (i = 0; i < clip.curves.length; i++) {
       var c = clip.curves[i];
+      // a clip can be played for part of its job only — see playExcept()
+      if (this._skip && this._skip.indexOf(c.path) >= 0) continue;
       var target = findByPath(this.hostId, c.path);
       if (!target) continue;
       var v = evalCurve(c.keys, time);
@@ -1095,6 +1093,20 @@ var Engine = (function () {
     this.play(clipName, onDone, dur || 0);
   };
 
+  /* Play a clip but leave the listed curve paths alone.
+     The tutorial's BallAnimation does two jobs at once: it swings the balance
+     AND it swaps which items are visible. The swing is now driven per block so
+     the pans move with every cube instead of jumping at the end, so the clip is
+     played for its visibility work only. */
+  Animator.prototype.playExcept = function (clipName, skipPaths, onDone) {
+    var self = this;
+    this._skip = skipPaths || null;
+    this.play(clipName, function () {
+      self._skip = null;
+      if (onDone) onDone();
+    });
+  };
+
   Animator.prototype.setInteger = function (name, v) {
     this.params[name] = v;
     if (this.onParam) this.onParam(name, v);
@@ -1104,6 +1116,23 @@ var Engine = (function () {
     hostId = String(hostId);
     if (!animators[hostId]) animators[hostId] = new Animator(hostId);
     return animators[hostId];
+  }
+
+  /* Sample a clip's pose once, directly, touching no animator state and no
+     ticker. This is how a continuous value (the balance tilt) can drive part of
+     a rig while a clip is independently playing the rest of it — going through
+     Animator.sampleAt would stop that clip's ticker every frame, and would also
+     inherit its playExcept filter. */
+  function samplePose(hostId, clipName, time, only) {
+    var clip = window.ANIMS[clipName];
+    if (!clip) return;
+    for (var i = 0; i < clip.curves.length; i++) {
+      var c = clip.curves[i];
+      if (only && only.indexOf(c.path) < 0) continue;
+      var target = findByPath(hostId, c.path);
+      if (!target) continue;
+      applyAttr(target, c.attr, evalCurve(c.keys, time));
+    }
   }
 
   /* ---------------------------------------------------------------------
@@ -1350,7 +1379,6 @@ var Engine = (function () {
     setActive: setActive, activeSelf: activeSelf, activeInHierarchy: activeInHierarchy,
     onActivated: onActivated, resetActivatedHandlers: resetActivatedHandlers,
     setSprite: setSprite, setNativeSize: setNativeSize,
-    setImageColor: setImageColor,
     setText: setText, getText: getText,
     setAnchoredPos: setAnchoredPos, getAnchoredPos: getAnchoredPos,
     setSizeDelta: setSizeDelta,
@@ -1362,7 +1390,7 @@ var Engine = (function () {
     TaskGroup: TaskGroup, CANCEL: CANCEL, isCancel: isCancel,
     wait: wait, waitUntil: waitUntil, tween: tween, loopScale: loopScale,
     Ease: Ease, add: add, remove: remove,
-    Audio: Audio2, animator: animator, findByPath: findByPath,
+    Audio: Audio2, animator: animator, samplePose: samplePose, findByPath: findByPath,
     confetti: confetti, confettiClear: confettiClear,
     prefersReducedMotion: prefersReducedMotion,
     preloadSprites: preloadSprites, spriteStatus: spriteStatus,

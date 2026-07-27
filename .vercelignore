@@ -1,0 +1,10 @@
+# The developer / design-review layer never ships to learners.
+god-mode/
+GOD-MODE.md
+
+# docs and CI config are not part of the playable build
+QA_CHECKLIST.md
+.github/
+
+node_modules/
+*.log

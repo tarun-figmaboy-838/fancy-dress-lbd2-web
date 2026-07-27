@@ -1,0 +1,12 @@
+{
+  "name": "fancy-dress-lbd2",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The Fancy Dress Competition — a balance-scale counting game for young learners. Dependency-free HTML/CSS/JS.",
+  "license": "UNLICENSED",
+  "scripts": {
+    "build": "node tools/build.js",
+    "start": "node tools/serve.js",
+    "serve": "node tools/serve.js"
+  }
+}

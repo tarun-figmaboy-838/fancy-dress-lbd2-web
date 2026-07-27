@@ -97,11 +97,14 @@ var Controllers = (function () {
      ======================================================================= */
   var glowing = [];
 
-  function setGlow(nodeId, on) {
+  /* setGlow(id, on, 'warm') — the pulse runs for as long as the highlight is
+     on and stops the instant it is taken off. */
+  function setGlow(nodeId, on, tone) {
     var n = nodeId && E.node(nodeId);
     if (!n) return;
     var el = n.el, i = glowing.indexOf(String(nodeId));
     if (on) {
+      el.classList.toggle('glow-warm', tone === 'warm');
       if (el.classList.contains('is-glowing')) return;     // already glowing
       el.classList.add('is-glowing', 'item-pop');
       if (i < 0) glowing.push(String(nodeId));
@@ -112,13 +115,91 @@ var Controllers = (function () {
       };
       el.addEventListener('animationend', off);
     } else {
-      el.classList.remove('is-glowing', 'item-pop');
+      el.classList.remove('is-glowing', 'item-pop', 'glow-warm');
       if (i >= 0) glowing.splice(i, 1);
     }
   }
   function clearGlows() {
     glowing.slice().forEach(function (id) { setGlow(id, false); });
     glowing.length = 0;
+  }
+
+  /* A one-shot celebratory pop, with no glow attached. Used when the
+     "weighs the same as N blocks" line is spoken: the item and every block
+     bounce in turn, so the sentence and the picture agree. */
+  function popNode(nodeId) {
+    var n = nodeId && E.node(nodeId);
+    if (!n) return;
+    var el = n.el;
+    el.classList.remove('pop-only');
+    void el.offsetWidth;                       // restart even if mid-pop
+    el.classList.add('pop-only');
+    var off = function (ev) {
+      if (ev.animationName !== 'item-pop') return;
+      el.classList.remove('pop-only');
+      el.removeEventListener('animationend', off);
+    };
+    el.addEventListener('animationend', off);
+  }
+
+  /* Pop a list of nodes one after another. Returns when the last one starts. */
+  function popSequence(ids, gap, tok) {
+    var list = (ids || []).filter(Boolean);
+    if (!list.length) return Promise.resolve();
+    var i = 0;
+    var step = function () {
+      if (i >= list.length) return Promise.resolve();
+      popNode(list[i++]);
+      return E.wait(gap, tok).then(step);
+    };
+    return step();
+  }
+
+  /* ------------------------------------------------------------------------
+     When is a word spoken?
+
+     The instruction typewriter already assumes the clip is read at a steady
+     pace — it reveals characters at clipLength / textLength. The same mapping
+     gives the moment any word in the line is heard, which is how the item and
+     the blocks can pop exactly as they are named instead of all at once at the
+     start of the sentence.
+     ---------------------------------------------------------------------- */
+  function wordTime(text, clip, word) {
+    var msg = text || '', dur = E.Audio.len(clip);
+    if (!msg.length || !dur || !word) return null;
+    var at = msg.toLowerCase().indexOf(String(word).toLowerCase());
+    if (at < 0) return null;
+    return (at / msg.length) * dur;
+  }
+
+  /* the plural noun a level counts in, taken from the line itself */
+  var BLOCK_WORDS = ['blocks', 'balls', 'marbles', 'marbels', 'cubes', 'block', 'ball', 'marble'];
+  function blockWordIn(text) {
+    var low = (text || '').toLowerCase();
+    for (var i = 0; i < BLOCK_WORDS.length; i++)
+      if (low.indexOf(BLOCK_WORDS[i]) >= 0) return BLOCK_WORDS[i];
+    return null;
+  }
+  /* "The toy boat weighs the same as 4 blocks!" -> "toy boat" */
+  function itemWordIn(text) {
+    var m = /^\s*the\s+(.+?)\s+weighs\b/i.exec(text || '');
+    return m ? m[1] : null;
+  }
+
+  /* Pop the item as its name is said, then the blocks as theirs is. Falls back
+     to sensible fractions of the clip when a line cannot be parsed. */
+  function popWithNarration(text, clip, itemIds, blockIds, tok) {
+    var dur = E.Audio.len(clip) || 2.4;
+    var tItem = wordTime(text, clip, itemWordIn(text));
+    var tBlock = wordTime(text, clip, blockWordIn(text));
+    if (tItem === null) tItem = dur * 0.14;
+    if (tBlock === null || tBlock <= tItem) tBlock = dur * 0.62;
+    var gap = Math.min(0.17, Math.max(0.07,
+      (dur - tBlock) / Math.max(1, (blockIds || []).length)));
+    return E.wait(tItem, tok)
+      .then(function () { return popSequence(itemIds, 0.12, tok); })
+      .then(function () { return E.wait(Math.max(0, tBlock - tItem - 0.12), tok); })
+      .then(function () { return popSequence(blockIds, gap, tok); });
   }
 
   /* =========================================================================
@@ -136,7 +217,19 @@ var Controllers = (function () {
     // where the arrow's dotted tail and its arrowhead sit inside that artwork,
     // measured from the sprite's own alpha coverage rather than estimated
     var TAIL = [0.660, 0.998], HEAD = [0.948, 0.020];
-    var SLICES = 14;
+    /* Every dot in Vector_10.webp, measured from the sprite's own alpha by
+       flood-filling each blob, ordered tail -> arrowhead. [x, y, w, h] in
+       source pixels. Rendering one element per dot is what lets the guide
+       appear a dot at a time rather than as a band-by-band wipe, and lets each
+       dot pop and glow on its own. The last entry is the arrowhead. */
+    var DOTS = [[202,559,11,10],[181,546,14,12],[162,532,14,13],[142,518,14,12],
+      [124,503,13,13],[106,488,13,12],[88,471,13,13],[72,453,13,14],[57,435,12,14],
+      [43,415,12,15],[30,395,12,15],[20,374,11,15],[11,351,11,15],[5,328,9,15],
+      [1,305,9,15],[0,281,8,15],[0,257,9,15],[4,233,9,16],[10,210,10,15],
+      [18,188,11,15],[28,167,12,14],[40,147,12,14],[54,128,13,13],[70,110,13,13],
+      [87,93,13,13],[105,78,13,12],[124,64,14,12],[144,52,15,11],[165,41,15,11],
+      [187,32,15,11],[210,26,15,9],[234,22,15,9],[257,21,16,8],[281,23,15,9],
+      [276,0,40,50]];
 
     var root = null, handEl = null, rippleEl = null;
     var anims = [], watch = null, cur = null, ready = null, broken = false;
@@ -154,24 +247,27 @@ var Controllers = (function () {
     }
     preload();
 
-    function buildSlices(host, cls) {
-      for (var i = 0; i < SLICES; i++) {
+    var CYCLE = 3.0;             // one full tail-to-head sweep, then a hold
+    var STAGGER = 0.052;         // gap between consecutive dots lighting up
+
+    function buildSlices(host) {
+      for (var i = 0; i < DOTS.length; i++) {
+        var d = DOTS[i];
         var s = document.createElement('div');
-        s.className = 'dot-guide__slice';
-        var h = AH / SLICES;
-        s.style.top = (i * h) + 'px';
-        s.style.height = h + 'px';
+        s.className = 'dot-guide__dot' + (i === DOTS.length - 1 ? ' is-head' : '');
+        s.style.left = d[0] + 'px';
+        s.style.top = d[1] + 'px';
+        s.style.width = d[2] + 'px';
+        s.style.height = d[3] + 'px';
         if (!broken) {
           s.style.backgroundImage = 'url("' + ARROW + '")';
           s.style.backgroundSize = AW + 'px ' + AH + 'px';
-          s.style.backgroundPosition = '0px ' + (-i * h) + 'px';
+          s.style.backgroundPosition = (-d[0]) + 'px ' + (-d[1]) + 'px';
         }
-        // revealed tail-first: the bottom slice lights up before the arrowhead
-        s.style.setProperty('--delay', (((SLICES - 1 - i) / SLICES) * 0.9).toFixed(3) + 's');
-        s.style.setProperty('--cycle', '2.1s');
+        s.style.setProperty('--delay', (i * STAGGER).toFixed(3) + 's');
+        s.style.setProperty('--cycle', CYCLE + 's');
         host.appendChild(s);
       }
-      if (cls) host.classList.add(cls);
     }
 
     function build() {
@@ -225,7 +321,9 @@ var Controllers = (function () {
     }
 
     /* Map the artwork's tail->head vector onto the item->pan vector, so the
-       arrow always physically connects the two, whatever the layout does. */
+       arrow always physically connects the two, whatever the layout does.
+       The same transform is kept so the hand can be walked along the very dots
+       that are drawn — see dotStage(). */
     function layoutArrow(A) {
       var mirror = A.b[0] < A.a[0] ? -1 : 1;         // bow away from the balance
       var tx = TAIL[0] * AW, ty = TAIL[1] * AH;
@@ -233,25 +331,23 @@ var Controllers = (function () {
       var dx = A.b[0] - A.a[0], dy = A.b[1] - A.a[1];
       var vl = Math.hypot(vx, vy) || 1, dl = Math.hypot(dx, dy);
       var k = Math.max(0.25, Math.min(1.6, dl / vl));
-      var deg = (Math.atan2(dy, dx) - Math.atan2(vy, vx)) * 180 / Math.PI;
+      var rad = Math.atan2(dy, dx) - Math.atan2(vy, vx);
       root.style.left = (A.a[0] - tx) + 'px';
       root.style.top = (A.a[1] - ty) + 'px';
       root.style.transformOrigin = tx + 'px ' + ty + 'px';
-      root.dataset.tf = 'rotate(' + deg.toFixed(2) + 'deg) scale(' + k.toFixed(4) + ')' +
-                        (mirror < 0 ? ' scaleX(-1)' : '');
-      root.style.transform = root.dataset.tf + ' scale(1)';
+      root.style.transform = 'rotate(' + (rad * 180 / Math.PI).toFixed(2) + 'deg) scale(' +
+                             k.toFixed(4) + ')' + (mirror < 0 ? ' scaleX(-1)' : '');
+      A.tf = { ax: A.a[0], ay: A.a[1], tx: tx, ty: ty, mirror: mirror, k: k,
+               cos: Math.cos(rad), sin: Math.sin(rad) };
     }
 
-    /* quadratic arc between the two anchors, bowed away from the board centre */
-    function pathPoint(A, u) {
-      var mx = (A.a[0] + A.b[0]) / 2, my = (A.a[1] + A.b[1]) / 2;
-      var dx = A.b[0] - A.a[0], dy = A.b[1] - A.a[1];
-      var len = Math.hypot(dx, dy) || 1;
-      var bow = Math.min(150, len * 0.26) * (dx < 0 ? -1 : 1);
-      var cx = mx - (dy / len) * bow, cy = my + (dx / len) * bow;
-      var w = 1 - u;
-      return [w * w * A.a[0] + 2 * w * u * cx + u * u * A.b[0],
-              w * w * A.a[1] + 2 * w * u * cy + u * u * A.b[1]];
+    /* Where dot i actually ends up on screen, in stage space. Mirrors exactly
+       what the CSS transform does to that element. */
+    function dotStage(A, i) {
+      var t = A.tf, d = DOTS[i];
+      var cx = d[0] + d[2] / 2, cy = d[1] + d[3] / 2;
+      var vx = t.mirror * (cx - t.tx) * t.k, vy = (cy - t.ty) * t.k;
+      return [t.ax + vx * t.cos - vy * t.sin, t.ay + vx * t.sin + vy * t.cos];
     }
 
     function stopAnims() {
@@ -266,23 +362,30 @@ var Controllers = (function () {
     function animateHand(A) {
       stopAnims();
       if (!handEl) return;
+      /* The fingertip in drag-hand.webp sits at (59, 33) of its 135x135 box,
+         measured from the sprite's alpha. Offsetting by that puts the fingertip
+         itself on the path instead of the element's corner — which is what made
+         the hand look like it was pointing somewhere else. */
+      var HX = 59, HY = 33;
+      // walk the dots that are actually drawn, so hand and arrow agree exactly
+      var N = DOTS.length;
+      function at(i) {
+        var p = dotStage(A, Math.max(0, Math.min(N - 1, i)));
+        return [p[0] - HX, p[1] - HY];
+      }
       if (E.prefersReducedMotion()) {
-        var p = pathPoint(A, 0.5);
+        var p = at(Math.floor(N / 2));
         handEl.style.opacity = '.9';
-        handEl.style.transform = 'translate3d(' + (p[0] - 67) + 'px,' + (p[1] - 30) + 'px,0)';
+        handEl.style.transform = 'translate3d(' + p[0] + 'px,' + p[1] + 'px,0)';
         return;
       }
       handEl.style.opacity = '';
-      var STEPS = 16, TRAVEL = 0.44, frames = [];
-      function at(u) {
-        var p = pathPoint(A, u);
-        return [p[0] - 67, p[1] - 30];      // hand image hotspot ~ fingertip
-      }
+      var STEPS = Math.min(20, N), TRAVEL = 0.44, frames = [];
       var s0 = at(0);
       frames.push({ offset: 0, opacity: 0, transform: 'translate3d(' + s0[0] + 'px,' + s0[1] + 'px,0) scale(.85)' });
       frames.push({ offset: 0.06, opacity: 1, transform: 'translate3d(' + s0[0] + 'px,' + s0[1] + 'px,0) scale(1)' });
       for (var i = 1; i <= STEPS; i++) {
-        var u = i / STEPS, q = at(u);
+        var u = i / STEPS, q = at(Math.round(u * (N - 1)));
         frames.push({
           offset: +(0.06 + TRAVEL * u).toFixed(4),
           opacity: 1,
@@ -290,7 +393,7 @@ var Controllers = (function () {
           easing: 'linear'
         });
       }
-      var e = at(1);
+      var e = at(N - 1);
       var T = 'translate3d(' + e[0].toFixed(1) + 'px,' + e[1].toFixed(1) + 'px,0)';
       frames.push({ offset: 0.58, opacity: 1, transform: T + ' scale(.9) translateY(10px)' });  // press
       frames.push({ offset: 0.66, opacity: 1, transform: T + ' scale(1)' });
@@ -334,14 +437,20 @@ var Controllers = (function () {
         cur = {
           fromId: String(cfg.fromId), toId: String(cfg.toId),
           glowId: cfg.glowId || cfg.fromId,
-          hand: cfg.hand !== false
+          hand: cfg.hand !== false,
+          /* cfg.follow === false pins the arrow to where its ends were when it
+             was shown. The tutorial needs this: its clip physically carries the
+             ball from the plinth to the pan, and an arrow that re-anchored to
+             the moving ball shrank and swung away mid-flight instead of
+             describing the route. */
+          follow: cfg.follow !== false
         };
         if (handEl) handEl.style.display = cur.hand ? '' : 'none';
         if (!place()) { cur = null; return; }
         root.classList.add('on');
         setGlow(cur.glowId, true);
         if (watch) clearInterval(watch);
-        watch = setInterval(place, 250);           // follows layout / pan moves
+        if (cur.follow) watch = setInterval(place, 250);   // tracks pan movement
       });
     }
 
@@ -364,9 +473,79 @@ var Controllers = (function () {
       root = handEl = rippleEl = null;
     }
 
-    window.addEventListener('resize', function () { if (cur) { cur._A = null; place(); } });
+    window.addEventListener('resize', function () {
+      if (cur && cur.follow) { cur._A = null; place(); }
+    });
 
     return { show: show, hide: hide, destroy: destroy, visible: function () { return !!cur; } };
+  })();
+
+  /* =========================================================================
+     Idle — if the child stops doing anything, show them what to do next.
+
+     One watcher for the whole game. Every pointer press resets it. On each
+     timeout it asks the level's tutorial controller what the current step is
+     and re-offers exactly that hint, so the child is never stuck staring at a
+     screen with no idea what it wants. It keeps offering, with a longer gap
+     each time, and stops as soon as they interact.
+     ======================================================================= */
+  var Idle = (function () {
+    var FIRST = 8, REPEAT = 12, MAX = 22;
+    var timer = null, wait = FIRST, providers = [], on = false, offered = false;
+
+    function clear() { if (timer) { clearTimeout(timer); timer = null; } }
+
+    function fire() {
+      timer = null;
+      var any = false;
+      providers.slice().forEach(function (p) {
+        try { if (p.offer()) any = true; } catch (e) { console.error(e); }
+      });
+      offered = offered || any;
+      // if nothing was appropriate to offer, wait longer before asking again
+      wait = Math.min(MAX, any ? REPEAT : wait + 5);
+      arm();
+    }
+
+    function arm() {
+      clear();
+      if (!on || !providers.length) return;
+      timer = setTimeout(fire, wait * 1000);
+    }
+
+    /* The child did something: take back whatever was being offered and start
+       counting again from the full interval. */
+    function poke() {
+      if (offered) {
+        offered = false;
+        providers.slice().forEach(function (p) {
+          if (!p.withdraw) return;
+          try { p.withdraw(); } catch (e) { console.error(e); }
+        });
+      }
+      wait = FIRST;
+      arm();
+    }
+
+    /* offer() returns true if it actually put a hint on screen.
+       withdraw() takes that hint back. */
+    function register(offer, withdraw) {
+      for (var i = 0; i < providers.length; i++) if (providers[i].offer === offer) return;
+      providers.push({ offer: offer, withdraw: withdraw });
+      on = true;
+      arm();
+    }
+
+    function reset() {
+      clear(); providers.length = 0; wait = FIRST; on = false; offered = false;
+    }
+
+    if (typeof window !== 'undefined') {
+      ['pointerdown', 'keydown', 'wheel'].forEach(function (ev) {
+        window.addEventListener(ev, poke, true);
+      });
+    }
+    return { register: register, reset: reset, poke: poke };
   })();
 
   /* Instantiate(prefab, parent) then rect.position = target.position.
@@ -451,6 +630,61 @@ var Controllers = (function () {
     else if (sprite && sprite.w) want = [sprite.w, sprite.h]; // sprite native size
     if (!want || !want[0] || !want[1]) return;
     E.setSizeDelta(blockId, want[0], want[1]);
+  }
+
+  /* ------------------------------------------------------------------------
+     Tidy the pile inside a pan.
+
+     The authored target slots carry the right *structure* — how many blocks sit
+     in each row, and how high the rows stack — but their x positions were
+     nudged by hand and drift by up to 20 px, which reads as a messy heap. Each
+     row is therefore rebuilt: same row membership, same row height, but evenly
+     spaced and centred on the pan. Nothing is hard-coded per level; the row
+     grouping is read from the slots the level already ships.
+     ---------------------------------------------------------------------- */
+  var rowCache = {};
+
+  function tidySlots(targetIds, panId) {
+    var key = (targetIds || []).join('|');
+    if (rowCache[key]) return rowCache[key];
+    var pts = (targetIds || []).map(function (id) {
+      var n = E.node(id);
+      return n ? { id: String(id), x: n.anchoredPos[0], y: n.anchoredPos[1] } : null;
+    }).filter(Boolean);
+    if (!pts.length) return (rowCache[key] = {});
+
+    // group into rows by y; authored rows are ~90 px apart, jitter is under 20
+    var rows = [];
+    pts.slice().sort(function (a, b) { return a.y - b.y; }).forEach(function (p) {
+      var row = rows[rows.length - 1];
+      if (row && Math.abs(p.y - row.y) <= 45) { row.items.push(p); row.y = (row.y + p.y) / 2; }
+      else rows.push({ y: p.y, items: [p] });
+    });
+
+    var out = {};
+    rows.forEach(function (row) {
+      // keep the row's own left-to-right order, then space it evenly
+      row.items.sort(function (a, b) { return a.x - b.x; });
+      var n = row.items.length;
+      var span = 0;
+      if (n > 1) {
+        var lo = row.items[0].x, hi = row.items[n - 1].x;
+        span = hi - lo;                       // honour the authored row width
+      }
+      var step = n > 1 ? span / (n - 1) : 0;
+      var mid = (n - 1) / 2;
+      row.items.forEach(function (p, i) {
+        out[p.id] = [+((i - mid) * step).toFixed(2), +row.y.toFixed(2)];
+      });
+    });
+    rowCache[key] = out;
+    return out;
+  }
+
+  /* the tidied anchoredPos for one slot, or null to use the authored one */
+  function tidySlotPos(targetIds, targetId, panId) {
+    var t = tidySlots(targetIds, panId);
+    return t[String(targetId)] || null;
   }
 
   function itemWeightOf(itemId, gm) {
@@ -605,15 +839,113 @@ var Controllers = (function () {
     };
     var TOTAL_CUBES = 3;
     var anim = E.animator(f.bookAnimator);
+    var tiltRunner = new Runner();
 
     function src() { return E.Audio.source(f.audioSource); }
+
+    /* ----------------------------------------------------------------------
+       The tutorial balance moves per block, exactly like the six levels.
+
+       BookAnimation drops the book in and leaves the item pan fully down;
+       from there each cube the child adds eases the pans a third of the way
+       back to level, instead of the original's single jump when the last one
+       lands. Same sampled curve, same renderer, so the tutorial and the levels
+       cannot look different.
+       -------------------------------------------------------------------- */
+    var BALANCE_PATHS = ['left ', 'Right', 'needle', 'plate'];
+    self.tilt = 1;
+
+    function setTutorialTilt(v) {
+      self.tilt = v;
+      var clip = v >= 0 ? 'Scale_LeftDown' : 'Scale_RightDown';
+      /* samplePose, not the animator: BallAnimation is playing its own
+         visibility curves on the same rig at this moment, and going through the
+         animator would stop its ticker every frame and inherit its filter. */
+      E.samplePose(f.bookAnimator, clip, Math.abs(v) * (E.clipLength(clip) || 0.75),
+                   BALANCE_PATHS);
+    }
+
+    function animateTutorialTilt(target, dur) {
+      var from = self.tilt;
+      if (Math.abs(target - from) < 0.0005) { setTutorialTilt(target); return; }
+      var tok = tiltRunner.fresh('tilt');
+      tiltRunner.run(function (t) {
+        return E.tween(dur, 'Smooth', function (u) {
+          if (!E.activeInHierarchy(self.node)) return;
+          setTutorialTilt(from + (target - from) * u);
+        }, t);
+      }, tok);
+    }
+
+    function tutorialTiltTarget() {
+      return Math.max(0, 1 - self.cubesPlaced / TOTAL_CUBES);
+    }
+
+    /* The clip draws its own drag demonstration: a hand that carries the book
+       from the plinth into the pan, plus a STATIC Vector_10 arrow beside it.
+       Only the static arrow is replaced — the hand is the thing actually doing
+       the dragging, and hiding it left the book sliding along on its own, which
+       is what made the tutorial drag read wrongly. */
+    function authoredArrowImages() {
+      var out = [];
+      ['items /Item 2/Hint hand/Image', 'items /Item 1/Hint hand (1)/Image'
+      ].forEach(function (p) {
+        var n = E.findByPath(f.bookAnimator, p);
+        if (n) out.push(n);
+      });
+      return out;
+    }
+    function hideAuthoredArrow() {
+      authoredArrowImages().forEach(function (n) { n.el.style.visibility = 'hidden'; });
+    }
+
+    function showTutorialDragArrow() {
+      hideAuthoredArrow();
+      /* The animated arrow traces the route the authored hand is about to take,
+         from the plinth into the left pan.
+
+         Anchored to the PLINTH, not to the ball: Guide.show resolves a preload
+         promise before it measures, and by then the clip has already started
+         carrying the ball, so anchoring to the ball froze the arrow around
+         wherever it happened to be mid-flight. The plinth never moves.
+
+         No travelling hand of our own either — the clip's hand is already
+         carrying the ball along that route, and a second one would contradict
+         it. */
+      var from = f.Base1 && E.node(f.Base1) ? f.Base1 : f.bookImage;
+      var to = E.findByPath(f.bookAnimator, 'left /Basket/Image');
+      if (from && to) {
+        Guide.show({ fromId: from, toId: to.id, glowId: f.bookImage,
+                     hand: false, follow: false });
+      }
+    }
+
+    self.setStep = function (s) { setStep(s); };   // for the god-mode tools
 
     function setStep(step) {
       anim.setInteger('Step', step);
       if (self.animState === 'New State' && step === 1) {
-        self.animState = 'Book animation'; anim.play('BookAnimation');
+        self.animState = 'Book animation';
+        /* The authored clip drags the book to the pan and flips on a static
+           Vector_10 arrow while it does. That static copy is suppressed and the
+           animated Guide is shown over the same route instead, so the tutorial
+           gets the identical dot-by-dot arrow the six levels use. */
+        /* The arrow draws itself first, so the child reads where the ball is
+           going, and the clip then carries it along that exact route. */
+        showTutorialDragArrow();
+        self.runner.run(function (t) {
+          return E.wait(1.1, t).then(function () {
+            anim.play('BookAnimation', function () {
+              self.tilt = 1;
+              Guide.hide();
+              hideAuthoredArrow();
+            });
+          });
+        }, self.runner.fresh('bookAnim'));
       } else if (self.animState === 'Book animation' && step === 2) {
-        self.animState = 'Ball Animation'; anim.play('BallAnimation');
+        self.animState = 'Ball Animation';
+        // the clip keeps its item/cube visibility work; the pans are ours now
+        anim.playExcept('BallAnimation', BALANCE_PATHS);
       }
     }
 
@@ -670,29 +1002,44 @@ var Controllers = (function () {
       var sp = E.stagePos(targetId), c = E.canvas();
       E.setAnchoredPos(f.hintHand, sp[0] - c[0] / 2, c[1] / 2 - sp[1]);
       tapLoop(f.hintHand, true);           // one still frame + a CSS tap loop
-      setGlow(targetId, true);
+      setGlow(targetId, true, 'warm');
       self.hintOn = String(targetId);
-      /* Dotted path only — the tap hand above is already on the button, and a
-         second hand dragging towards it would demonstrate the wrong gesture. */
-      if (f.ballImage && E.node(f.ballImage) && E.activeInHierarchy(f.ballImage))
-        Guide.show({ fromId: f.ballImage, toId: targetId, glowId: targetId, hand: false });
+      /* No dotted arrow here. The tap hand is sitting on the button already;
+         an arrow drawn from the sample block to a button only added clutter and
+         suggested a drag where the child has to tap. The arrow is reserved for
+         the one gesture it describes: dragging the item onto a pan. */
     }
 
-    function startHintWithDelay(delay, targetId) {
-      // the original blocks the plus hint once the check button is live
-      if (self.checkButtonActivated && String(targetId) === String(f.plusButton)) return;
-      var tok = self.runner.fresh('hint');
-      self.runner.run(function (t) {
-        return E.wait(delay, t).then(function () { showHintOnButton(targetId); });
-      }, tok);
+    /* The ball sample beside the +/- buttons. Same rule as the levels: the blue
+       glow is a cue while the child is being asked to add blocks, and goes out
+       the moment they add one. */
+    function glowSampleBlock(on) {
+      if (f.ballImage && E.node(f.ballImage)) setGlow(f.ballImage, !!on);
+    }
+
+    /* the book in the pan, then every cube the child added, in order */
+    self.spawned = [];
+    function placedThings() {
+      var out = [];
+      if (f.bookImage && E.node(f.bookImage)) {
+        // the copy of the book that BookAnimation moves into the left pan
+        var inPan = E.findByPath(f.bookAnimator, 'left /Basket/Image/Book');
+        out.push(inPan ? inPan.id : f.bookImage);
+      }
+      return out.concat(self.spawned.filter(Boolean));
     }
 
     function spawnAndMoveCube(index, tok) {
       var id = E.instantiate((f.cubePrefab || {}).template, f.basket);
       if (!id) return E.wait(0.3, tok);
+      self.spawned.push(id);
       var tp = (f.cubeTargetPositions || [])[index];
       sizeBlockForSlot(id, tp, null);
-      if (tp) { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
+      if (tp) {
+        var tidy = tidySlotPos(f.cubeTargetPositions, tp, f.basket);
+        if (tidy) E.setAnchoredPos(id, tidy[0], tidy[1]);
+        else { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
+      }
       E.setScale(id, 0);
       doScale(id, 1, 0.3, 'OutBack', tok);
       return E.wait(0.3, tok);
@@ -702,18 +1049,22 @@ var Controllers = (function () {
       if (self.currentCubeIndex >= (f.cubeSpawnPoints || []).length ||
           self.cubesPlaced >= TOTAL_CUBES) return;
       hideHintHand();
+      glowSampleBlock(false);            // the cue has been understood
       var idx = self.currentCubeIndex;
       self.runner.run(function (t) { return spawnAndMoveCube(idx, t); });
       self.currentCubeIndex++;
       self.cubesPlaced++;
+      // the pans ease a third of the way back with every cube, in step with
+      // the block landing rather than all at once at the end
+      animateTutorialTilt(tutorialTiltTarget(), 0.5);
 
       if (self.cubesPlaced === 1) {
         E.setInteractable(f.minusButton, true);
         if (f.minusCanvasGroup) E.setCanvasGroupAlpha(f.minusCanvasGroup, 1);
       }
       if (self.cubesPlaced < TOTAL_CUBES) {
-        if (!self.checkButtonActivated)
-          startHintWithDelay(fld(f, 'hintReappearDelay', 0.5), f.plusButton);
+        // the next + hint comes from the Idle watcher, not a 0.5 s re-show
+        if (!self.checkButtonActivated) Idle.poke();
       } else {
         setStep(2);
         self.runner.run(function (t) { return enableCheckButtonWithHint(t); });
@@ -726,13 +1077,7 @@ var Controllers = (function () {
         E.setInteractable(f.checkButton, true);
         self.checkButtonActivated = true;
         hideHintHand();
-        var t2 = self.runner.fresh('checkHint');
-        self.runner.run(function (t3) {
-          return E.wait(12, t3).then(function () {
-            if (!f.checkButton || !E.activeInHierarchy(f.checkButton)) return;
-            showHintOnButton(f.checkButton);
-          });
-        }, t2);
+        Idle.poke();          // Check is offered once the child has gone quiet
       });
     }
 
@@ -750,6 +1095,15 @@ var Controllers = (function () {
         .then(function () { return fadeBar(false, 0.3, tok); })
         .then(function () {
           E.setActive(f.labelImage, true);
+          /* "Weight of ball = weight of 3 blocks" — the ball pops as the ball is
+             named and the blocks as theirs is, the same beat the levels use.
+             This clip has no text line, so the wording is supplied to give
+             popWithNarration the same two cues to aim at. */
+          var placed = placedThings();
+          self.runner.run(function (t) {
+            return popWithNarration('The ball weighs the same as 3 blocks',
+              f.instruction8Audio, placed.slice(0, 1), placed.slice(1), t);
+          }, self.runner.fresh('equalPop'));
           if (f.instruction8Audio) {
             var s = src(); s.stop(); s.setClip(f.instruction8Audio); s.play();
             return E.waitUntil(function () { return !s.isPlaying(); }, tok);
@@ -759,7 +1113,7 @@ var Controllers = (function () {
           E.setActive(f.Base2, false);
           E.setActive(f.nextButton, true);
           E.setInteractable(f.nextButton, true);
-          startHintWithDelay(12, f.nextButton);
+          Idle.poke();
         });
     }
 
@@ -791,7 +1145,9 @@ var Controllers = (function () {
         })
         .then(function () {
           E.setInteractable(f.plusButton, true);
-          startHintWithDelay(0.5, f.plusButton);
+          // "Tap the + button to add blocks" — light the block being counted
+          glowSampleBlock(true);
+          Idle.poke();
         });
     }
 
@@ -813,8 +1169,33 @@ var Controllers = (function () {
         self.runner.stopAll();
         Game.loadScene(fld(f, 'nextSceneIndex', 1));
       });
+      Idle.register(offerIdleHint, function () {
+        hideHintHand();
+        glowSampleBlock(false);
+      });
       self.runner.run(gameSequence, self.runner.fresh('gameSequence'));
     });
+
+    /* The tutorial is a fixed sequence, so the idle nudge is simply "press the
+       button the step is waiting on". */
+    function offerIdleHint() {
+      if (!E.activeInHierarchy(hostId)) return false;
+      if (src().isPlaying()) return false;      // let the instruction finish
+      var live = function (id) { return id && E.node(id) && E.activeInHierarchy(id); };
+      if (live(f.nextButton) && E.isInteractable(f.nextButton)) {
+        showHintOnButton(f.nextButton); return true;
+      }
+      if (live(f.checkButton) && E.isInteractable(f.checkButton)) {
+        showHintOnButton(f.checkButton); return true;
+      }
+      if (live(f.plusButton) && E.isInteractable(f.plusButton) &&
+          self.cubesPlaced < TOTAL_CUBES) {
+        showHintOnButton(f.plusButton);
+        glowSampleBlock(true);
+        return true;
+      }
+      return false;
+    }
 
     put('TutorialManager', hostId, self);
     return self;
@@ -1255,7 +1636,12 @@ var Controllers = (function () {
         var tp = self.currentTargetPoints[self.cubeIndex];
         // size before positioning: setStagePos measures from the final box
         sizeBlockForSlot(id, tp, f.normalCubeSprite);
-        if (tp) { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
+        if (tp) {
+          // even, centred rows instead of the authored hand-nudged scatter
+          var tidy = tidySlotPos(self.currentTargetPoints, tp, self.activeCubeBasket);
+          if (tidy) E.setAnchoredPos(id, tidy[0], tidy[1]);
+          else { var p = E.stagePos(tp); E.setStagePos(id, p[0], p[1]); }
+        }
         E.setScale(id, 0);
         doScale(id, 1, 0.3, 'OutBack', tok);
         self.spawnedCubes[self.cubeIndex] = id;
@@ -1534,17 +1920,11 @@ var Controllers = (function () {
       Guide.show({ fromId: from, toId: to, glowId: from });
     }
 
-    /* Re-offer the demonstration only after the child has gone quiet again. */
-    function scheduleGuide(delay) {
-      if (self.leftItemPlaced) return;
-      var tok = self.runner.fresh('ghost');
-      self.runner.run(function (t) {
-        return E.wait(delay, t).then(function () {
-          if (self.leftItemPlaced) return;
-          startGhostAnimation();
-        });
-      }, tok);
-    }
+    /* Nothing schedules guidance on its own clock any more. Every hint in a
+       level — the drag arrow, the +, Check, Next and Try Again hands — is
+       offered by the single Idle watcher once the child has been still for its
+       interval, and taken away the moment they act. That is the whole reason
+       the hints used to feel like they were "on all the time". */
 
     // ------------------------------------------------------------- hints ----
     var hintTarget = {};       // hint key -> the button it was pointing at
@@ -1573,6 +1953,7 @@ var Controllers = (function () {
       self.plusClicked = true;
       self.runner.stop('plusHint');
       killHint('activePlusHint');
+      glowSampleBlock(false);        // the cue has been understood
     };
 
     function onMinusClicked() {
@@ -1581,15 +1962,12 @@ var Controllers = (function () {
     }
     self.onMinusClicked = onMinusClicked;
 
+    /* The + hint is no longer put on a timer of its own; the Idle watcher will
+       offer it if the child goes quiet. This just arms the idle clock so the
+       first offer comes a full interval after the instruction finishes. */
     function showPlusHintAfterDelay() {
       if (!self.instruction3Completed) return;
-      var tok = self.runner.fresh('plusHint');
-      self.runner.run(function (t) {
-        return E.wait(fld(f, 'plusHintDelay', 3), t).then(function () {
-          if (self.plusClicked || self.activePlusHint) return;
-          raiseHint('activePlusHint', f.plusHintHandPrefab, f.plusButtonTarget);
-        });
-      }, tok);
+      Idle.poke();
     }
 
     self.showMinusHint = function () {
@@ -1601,14 +1979,8 @@ var Controllers = (function () {
       }, tok);
     };
 
-    self.startCheckHint = function () {
-      var tok = self.runner.fresh('checkHint');
-      self.runner.run(function (t) {
-        return E.wait(fld(f, 'checkHintDelay', 12), t).then(function () {
-          raiseHint('activeCheckHint', f.checkHintHandPrefab, f.checkButtonTarget);
-        });
-      }, tok);
-    };
+    /* Same again: Check is offered by the Idle watcher, not on a 12 s timer. */
+    self.startCheckHint = function () { Idle.poke(); };
 
     self.onCheckClicked = function () {
       self.runner.stop('checkHint');
@@ -1620,26 +1992,23 @@ var Controllers = (function () {
       return playInstructionAndWait(f.instruction1, f.instruction1Audio, tok)
         .then(function () { return E.wait(0.5, tok); })
         .then(function () {
-          scheduleGuide(fld(f, 'leftItemHintDelay', 3));
           E.setActive(f.startitems, false);
           E.setActive(f.itemmain, true);
+          // "Place the toy boat on the balance" — start the idle clock from here
+          Idle.poke();
           return playInstructionAndWait(f.instruction2, f.instruction2Audio, tok);
         });
     }
 
-    /* Any touch of the item stops the demonstration at once; it comes back
-       only if the child then goes quiet again without placing it. */
+    /* Any touch of the item takes the demonstration away at once. It comes back
+       only through the Idle watcher, a full interval after they stop. */
     self.onLeftItemTouched = function () {
       stopGhost();
       self.runner.stop('ghost');
-      scheduleGuide(fld(f, 'guideRestartDelay', 7));
+      Idle.poke();
     };
 
-    self.onLeftItemDragStarted = function () {
-      stopGhost();
-      self.runner.stop('ghost');
-      scheduleGuide(fld(f, 'guideRestartDelay', 7));
-    };
+    self.onLeftItemDragStarted = self.onLeftItemTouched;
 
     self.onLeftItemPlaced = function () {
       if (self.leftItemPlaced) return;
@@ -1660,6 +2029,8 @@ var Controllers = (function () {
       return playInstructionAndWait(f.instruction3, f.instruction3Audio, tok).then(function () {
         self.instruction3Completed = true;
         if (g) g.updatePlusMinusState();
+        // "Tap the + button to add blocks" — light the block being counted
+        glowSampleBlock(true);
         showPlusHintAfterDelay();
       });
     }
@@ -1669,10 +2040,32 @@ var Controllers = (function () {
       self.runner.run(correctSequence);
     };
 
+    /* what is on the balance, split so each group can pop on its own cue */
+    function balanceContents() {
+      var g = gm();
+      if (!g) return { items: [], blocks: [] };
+      var all = g.scaleState.leftItems.concat(g.scaleState.rightItems);
+      var pick = function (k) {
+        return all.filter(function (x) { return x.kind === k; })
+                  .map(function (x) { return x.id; });
+      };
+      return { items: pick('item'), blocks: pick('cube') };
+    }
+
     function correctSequence(tok) {
       return playInstructionAndWait(f.instruction4, f.instruction4Audio, tok)
         .then(function () { return E.wait(2, tok); })
-        .then(function () { return playInstructionAndWait(f.instruction8, f.instruction8Audio, tok); })
+        .then(function () {
+          /* "The toy boat weighs the same as 4 blocks!" — the boat pops as the
+             boat is named and the blocks pop as the blocks are, so nothing
+             bounces before the child has heard why. */
+          var c = balanceContents();
+          self.runner.run(function (t) {
+            return popWithNarration(f.instruction8, f.instruction8Audio,
+                                    c.items, c.blocks, t);
+          }, self.runner.fresh('equalPop'));
+          return playInstructionAndWait(f.instruction8, f.instruction8Audio, tok);
+        })
         .then(function () {
           if (f.isLastLevel) {
             return E.wait(1.5, tok).then(function () {
@@ -1682,12 +2075,7 @@ var Controllers = (function () {
             });
           }
           E.setActive(f.nextButton, true);
-          var tok2 = self.runner.fresh('nextHint');
-          self.runner.run(function (t) {
-            return E.wait(fld(f, 'buttonHintDelay', 12), t).then(function () {
-              raiseHint('activeNextHint', f.buttonHintHandPrefab, f.nextButton);
-            });
-          }, tok2);
+          Idle.poke();       // Next is offered by the Idle watcher if they wait
         });
     }
 
@@ -1711,14 +2099,8 @@ var Controllers = (function () {
       });
     };
 
-    function startTryAgainHint() {
-      var tok = self.runner.fresh('tryAgainHint');
-      self.runner.run(function (t) {
-        return E.wait(fld(f, 'buttonHintDelay', 12), t).then(function () {
-          raiseHint('activeTryAgainHint', f.buttonHintHandPrefab, f.tryAgainButton);
-        });
-      }, tok);
-    }
+    /* Try Again is offered by the Idle watcher too. */
+    function startTryAgainHint() { Idle.poke(); }
 
     self.playInstruction7 = function () {
       E.setActive(f.instructionBar, true);
@@ -1764,8 +2146,69 @@ var Controllers = (function () {
       Guide.hide();
       clearGlows();
       self.killAllHints();
+      Idle.register(offerIdleHint, withdrawIdleHint);
       self.runner.run(tutorialFlow, self.runner.fresh('tutorial'));
     });
+
+    /* Everything offerIdleHint can put on screen, taken back together. */
+    function withdrawIdleHint() {
+      Guide.hide();
+      self.killAllHints();
+      glowSampleBlock(false);
+    }
+
+    /* The block / ball / marble sample beside the +/- buttons. Its blue glow is
+       a cue, not decoration: it pulses only while the child is being asked to
+       add blocks, and goes out as soon as they do. */
+    function sampleBlockId() {
+      var all = COMP['DraggableItem'] || {}, found = null;
+      Object.keys(all).forEach(function (k) {
+        var d = all[k];
+        if (d.isCube && String(d.gameManagerId) === String(f.gameManager)) found = d.node;
+      });
+      return found;
+    }
+    function glowSampleBlock(on) { setGlow(sampleBlockId(), !!on); }
+
+    /* What does the child need to do right now? Re-offer that, and only that.
+       Called by the Idle watcher after a stretch of no input. */
+    function offerIdleHint() {
+      if (!E.activeInHierarchy(self.node)) return false;
+      // never talk over the instruction that is still being spoken
+      if (self.typing || src().isPlaying()) return false;
+      var g = gm();
+
+      // a button is sitting there waiting to be pressed — point at it
+      var waiting = [[f.tryAgainButton, 'activeTryAgainHint'],
+                     [f.nextButton, 'activeNextHint']];
+      for (var i = 0; i < waiting.length; i++) {
+        var b = waiting[i][0];
+        if (b && E.node(b) && E.activeInHierarchy(b)) {
+          raiseHint(waiting[i][1], f.buttonHintHandPrefab, b);
+          return true;
+        }
+      }
+
+      // the item is still on its plinth: re-run the drag demonstration
+      if (!self.leftItemPlaced) { startGhostAnimation(); return true; }
+
+      if (!g || g.scaleState.interactionLocked) return false;
+
+      // blocks are down and Check is live — nudge Check
+      if (g.cubeIndex > 0 && f.checkButtonTarget && E.node(f.checkButtonTarget) &&
+          E.activeInHierarchy(f.checkButtonTarget)) {
+        raiseHint('activeCheckHint', f.checkHintHandPrefab, f.checkButtonTarget);
+        return true;
+      }
+
+      // nothing on the balance yet — nudge the + button and light the block
+      if (g.cubeIndex === 0 && f.plusButtonTarget && E.isInteractable(f.plusButtonTarget)) {
+        raiseHint('activePlusHint', f.plusHintHandPrefab, f.plusButtonTarget);
+        glowSampleBlock(true);
+        return true;
+      }
+      return false;
+    }
 
     put('WeightGameTutorialController', hostId, self);
     return self;
@@ -1778,7 +2221,9 @@ var Controllers = (function () {
     reset: function () {
       Guide.destroy();
       clearGlows();
+      Idle.reset();
       E.confettiClear();
+      rowCache = {};
       COMP = {};
       pending = [];
     },
