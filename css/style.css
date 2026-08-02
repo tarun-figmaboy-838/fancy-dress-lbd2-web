@@ -364,17 +364,29 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 /* Fires once when the glow state begins, then removes itself. The glow lives on
    ::before now, so the pop has .un-bg's transform entirely to itself. */
 .un.item-pop > .un-bg {
-  animation: item-pop .46s cubic-bezier(.34,1.56,.64,1) 1;
+  animation: item-pop .46s linear 1;
 }
 /* A pop with no glow attached — used to celebrate each item and block as the
    "weighs the same as" line is spoken. */
 .un.pop-only > .un-bg {
-  animation: item-pop .52s cubic-bezier(.34,1.62,.6,1) 1;
+  animation: item-pop .52s linear 1;
 }
+/* A highlight only ever makes the artwork bigger. This used to open on
+   scale(.92, .96), so the frame a highlight began the item snapped ~8% smaller
+   before springing back — at a glance the item blinked out and returned. It now
+   starts at the size it is already drawn at, so the pop reads as the item
+   swelling forward and settling.
+   The bounce comes from per-keyframe easing rather than one overshooting
+   cubic-bezier across the whole run: an overshoot on the settle segment dipped
+   the artwork back under full size, which is the shrink this is here to remove.
+   Every curve below stays within [0,1], so scale never leaves [1, 1.08]. */
 @keyframes item-pop {
-  0%   { transform: translate3d(0, 0, 0) scale(.92, .96); }
-  38%  { transform: translate3d(0, -7px, 0) scale(1.08, 1.05); }
-  66%  { transform: translate3d(0, 1px, 0) scale(.985, 1.01); }
+  0%   { transform: translate3d(0, 0, 0) scale(1, 1);
+         animation-timing-function: cubic-bezier(.18, .85, .32, 1); }   /* springs up */
+  36%  { transform: translate3d(0, -7px, 0) scale(1.08, 1.05);
+         animation-timing-function: cubic-bezier(.45, 0, .55, 1); }     /* falls back */
+  72%  { transform: translate3d(0, 1px, 0) scale(1.01, 1.015);
+         animation-timing-function: cubic-bezier(.33, 0, .45, 1); }     /* settles */
   100% { transform: translate3d(0, 0, 0) scale(1, 1); }
 }
 

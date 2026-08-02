@@ -899,9 +899,114 @@ var Engine = (function () {
       return durations[src] !== undefined ? durations[src] : 2;
     }
 
+    /* ---- synthesised SFX ---------------------------------------------
+       The original project has no success sting, and shipping one would add an
+       asset to a build whose whole point is 2.1 MB. WebAudio synthesises it.
+
+       A bare arpeggio read as a doorbell, so the correct-answer sting is built
+       in four layers that arrive in turn, the way an arcade reward does:
+
+         thump    a low sine dropping 190 -> 70 Hz, so the sting lands on
+                  something rather than starting in mid-air
+         run      C6 E6 G6 C7 climbing in 70 ms steps, triangle for brightness
+                  with a square underneath for bite
+         chord    C7 E7 G7 held together and detuned a few cents apart, which
+                  is what turns the last step of the run into an arrival
+         sparkle  seven short high blips scattered above the chord — the star
+                  shower that keeps the tail moving after the notes stop
+
+       Everything but the thump feeds a slap-back echo; that is most of what
+       separates "celebration" from "notification". The thump stays dry because
+       echoing it just muddies the low end. Peak gain is held down because the
+       correct-answer voice-over starts on the same beat and has to stay
+       intelligible over the top. */
+    var ctx = null, sfxBus = null;
+
+    function audioCtx() {
+      var C = window.AudioContext || window.webkitAudioContext;
+      if (!C) return null;
+      if (!ctx) { try { ctx = new C(); } catch (e) { return null; } }
+      // a context created before the first gesture starts out suspended
+      if (ctx.state === 'suspended') { try { ctx.resume(); } catch (e) {} }
+      return ctx;
+    }
+
+    /* the shared echo bus, built once per context */
+    function bus(c) {
+      if (sfxBus && sfxBus.ctx === c) return sfxBus.out;
+      var out = c.createGain();
+      out.connect(c.destination);
+      var delay = c.createDelay(0.5), fb = c.createGain(), wet = c.createGain();
+      delay.delayTime.value = 0.115;
+      fb.gain.value = 0.28;                  // three or four audible repeats
+      wet.gain.value = 0.2;
+      out.connect(delay); delay.connect(fb); fb.connect(delay);
+      delay.connect(wet); wet.connect(c.destination);
+      sfxBus = { ctx: c, out: out };
+      return out;
+    }
+
+    /* one note: fast attack, exponential decay, its own envelope */
+    function note(c, t0, freq, dur, peak, type, detune, dest) {
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      g.connect(dest || bus(c));
+      var o = c.createOscillator();
+      o.type = type || 'triangle';
+      o.frequency.setValueAtTime(freq, t0);
+      if (detune) o.detune.setValueAtTime(detune, t0);
+      o.connect(g);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+
+    function thump(c, t0) {
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(0.26, t0 + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + 0.22);
+      g.connect(c.destination);              // dry on purpose
+      var o = c.createOscillator();
+      o.type = 'sine';
+      o.frequency.setValueAtTime(190, t0);
+      o.frequency.exponentialRampToValueAtTime(70, t0 + 0.2);
+      o.connect(g);
+      o.start(t0); o.stop(t0 + 0.24);
+    }
+
+    var RUN = [1046.50, 1318.51, 1567.98, 2093.00];          // C6 E6 G6 C7
+    var CHORD = [2093.00, 2637.02, 3135.96];                 // C7 E7 G7
+    var SPARKLE = [3136, 2637, 3520, 2794, 4186, 3520, 4699];
+
+    function correctSting(c, t0) {
+      thump(c, t0);
+      RUN.forEach(function (f, i) {
+        note(c, t0 + i * 0.07, f, 0.26, 0.15, 'triangle');
+        note(c, t0 + i * 0.07, f, 0.09, 0.045, 'square');     // the bite
+      });
+      /* the chord is the loudest musical moment on purpose: the run is the
+         wind-up and this is the arrival it winds up to */
+      var land = t0 + RUN.length * 0.07;
+      CHORD.forEach(function (f, i) {
+        note(c, land, f, 0.85, 0.13, 'triangle', (i - 1) * 7);
+      });
+      SPARKLE.forEach(function (f, i) {
+        note(c, land + 0.09 + i * 0.055, f, 0.16, 0.06, 'sine');
+      });
+    }
+
+    var STINGS = { correct: correctSting };
+
+    function sfx(name) {
+      var make = STINGS[name]; if (!make) return;
+      var c = audioCtx(); if (!c) return;
+      make(c, c.currentTime + 0.01);
+    }
+
     return {
       get: get, duration: duration, source: source,
-      preload: preload, len: len,
+      preload: preload, len: len, sfx: sfx,
       sourcePlay: function (id) { source(id).play(); },
       sourceStop: function (id) { source(id).stop(); },
       reset: function () { sources = {}; }

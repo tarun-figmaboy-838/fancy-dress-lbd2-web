@@ -490,18 +490,33 @@ var Controllers = (function () {
      each time, and stops as soon as they interact.
      ======================================================================= */
   var Idle = (function () {
-    var FIRST = 8, REPEAT = 12, MAX = 22;
+    /* FIRST is the wait after the child themselves did something. SOON is the
+       wait after the game has just finished telling them what to do — used by
+       the Tutorial scene only, where a line ended and the board then sat silent
+       for a full eight seconds before the hand appeared. The six levels stay on
+       FIRST throughout, so their pacing is unchanged. */
+    var FIRST = 8, SOON = 3, REPEAT = 12, MAX = 22, RETRY = 0.5;
     var timer = null, wait = FIRST, providers = [], on = false, offered = false;
 
     function clear() { if (timer) { clearTimeout(timer); timer = null; } }
 
     function fire() {
       timer = null;
-      var any = false;
+      var any = false, busy = false;
       providers.slice().forEach(function (p) {
-        try { if (p.offer()) any = true; } catch (e) { console.error(e); }
+        try {
+          var r = p.offer();
+          if (r === 'busy') busy = true;
+          else if (r) any = true;
+        } catch (e) { console.error(e); }
       });
       offered = offered || any;
+      /* A tick that lands while an instruction is still being spoken is our
+         silence, not the child's. It used to count as a missed offer and push
+         the next attempt out by another five seconds — three lines long enough
+         to swallow a tick and the hand arrived 22 s late. Re-check as soon as
+         the line is over instead. */
+      if (busy && !any) { timer = setTimeout(fire, RETRY * 1000); return; }
       // if nothing was appropriate to offer, wait longer before asking again
       wait = Math.min(MAX, any ? REPEAT : wait + 5);
       arm();
@@ -513,9 +528,7 @@ var Controllers = (function () {
       timer = setTimeout(fire, wait * 1000);
     }
 
-    /* The child did something: take back whatever was being offered and start
-       counting again from the full interval. */
-    function poke() {
+    function restart(w) {
       if (offered) {
         offered = false;
         providers.slice().forEach(function (p) {
@@ -523,9 +536,17 @@ var Controllers = (function () {
           try { p.withdraw(); } catch (e) { console.error(e); }
         });
       }
-      wait = FIRST;
+      wait = w;
       arm();
     }
+
+    /* The child did something: take back whatever was being offered and start
+       counting again from the full interval. */
+    function poke() { restart(FIRST); }
+
+    /* The game just finished saying what to do. If the child does not act,
+       show them — and sooner than if they had been the last one to move. */
+    function prompt() { restart(SOON); }
 
     /* offer() returns true if it actually put a hint on screen.
        withdraw() takes that hint back. */
@@ -545,7 +566,7 @@ var Controllers = (function () {
         window.addEventListener(ev, poke, true);
       });
     }
-    return { register: register, reset: reset, poke: poke };
+    return { register: register, reset: reset, poke: poke, prompt: prompt };
   })();
 
   /* Instantiate(prefab, parent) then rect.position = target.position.
@@ -1097,7 +1118,7 @@ var Controllers = (function () {
         E.setInteractable(f.checkButton, true);
         self.checkButtonActivated = true;
         hideHintHand();
-        Idle.poke();          // Check is offered once the child has gone quiet
+        Idle.prompt();        // Check has just appeared; offer it soon
       });
     }
 
@@ -1105,6 +1126,12 @@ var Controllers = (function () {
       E.setActive(f.checkButton, false);
       hideHintHand();
       self.runner.stop('checkHint');
+      // both Group_485 counters go together, and not before Check
+      E.setActive(f.Base1, false);
+      E.setActive(f.Base2, false);
+      // the tutorial's Check is only offered once the demo is right, so it is
+      // the same success beat the six levels celebrate
+      E.Audio.sfx('correct');
       if (f.bookCorrectParticle) E.confetti(f.bookCorrectParticle);
       self.runner.run(showInstruction7AfterCheck);
     }
@@ -1130,10 +1157,10 @@ var Controllers = (function () {
           }
         })
         .then(function () {
-          E.setActive(f.Base2, false);
+          // Base2 went with Base1 back at Check
           E.setActive(f.nextButton, true);
           E.setInteractable(f.nextButton, true);
-          Idle.poke();
+          Idle.prompt();
         });
     }
 
@@ -1154,7 +1181,7 @@ var Controllers = (function () {
         .then(function () { return E.wait(3, tok); })
         .then(function () { return fadeBar(true, 0.3, tok); })
         .then(function () {
-          E.setActive(f.Base1, false);
+          // both counters stay up until Check, the same rule the six levels follow
           return typeWithAudio(f.instruction5, f.instruction5Audio, tok);
         })
         .then(function () { return E.wait(1, tok); })
@@ -1167,7 +1194,7 @@ var Controllers = (function () {
           E.setInteractable(f.plusButton, true);
           // "Tap the + button to add blocks" — light the block being counted
           glowSampleBlock(true);
-          Idle.poke();
+          Idle.prompt();
         });
     }
 
@@ -1200,7 +1227,7 @@ var Controllers = (function () {
        button the step is waiting on". */
     function offerIdleHint() {
       if (!E.activeInHierarchy(hostId)) return false;
-      if (src().isPlaying()) return false;      // let the instruction finish
+      if (src().isPlaying()) return "busy";     // let the instruction finish
       var live = function (id) { return id && E.node(id) && E.activeInHierarchy(id); };
       if (live(f.nextButton) && E.isInteractable(f.nextButton)) {
         showHintOnButton(f.nextButton); return true;
@@ -1423,11 +1450,17 @@ var Controllers = (function () {
       window.addEventListener('pointercancel', winUp, true);
     });
 
-    register(hostId, 'DraggableItem', function start() {
+    /* The level flow may nudge the item after start() has run; wherever it
+       leaves it is where a released drag has to return to. */
+    self.rehome = function () {
       self.startPos = E.getAnchoredPos(self.node);
+      self.homeStage = E.stagePos(self.node);
+    };
+
+    register(hostId, 'DraggableItem', function start() {
       var nn = E.node(self.node);
       self.startParent = nn.parent ? nn.parent.id : Game.rootId();
-      self.homeStage = E.stagePos(self.node);
+      self.rehome();
       setCursorState();
     });
 
@@ -1779,6 +1812,7 @@ var Controllers = (function () {
         // the celebration belongs to the confirmed final success state only
         if (!self.celebrated) {
           self.celebrated = true;
+          E.Audio.sfx('correct');
           if (f.correctParticle) E.confetti(f.correctParticle);
         }
         self.scaleState.balanceValue = 0;
@@ -2023,15 +2057,52 @@ var Controllers = (function () {
     self.onCheckClicked = function () {
       self.runner.stop('checkHint');
       killHint('activeCheckHint');
+      setCountersVisible(false);     // the answer is in; the counters are done
     };
+
+    /* Every level draws its item twice: once in the Start Items display the
+       level opens on, and once in the row the child actually plays with. The
+       two copies are authored a few units apart — between 4 and 11 across the
+       six levels — so the item visibly hopped sideways the moment the board
+       swapped from one to the other. The intro copy is what the child has been
+       looking at while the question was read, so the playable copy is landed
+       exactly there and the swap becomes invisible.
+
+       Matched on the sprite rather than the name, because only the artwork is
+       reliably the same on both sides. */
+    function introTwinOf(play) {
+      var root = f.startitems && E.node(f.startitems);
+      var want = play.image && play.image.sprite ? play.image.sprite.path : null;
+      if (!root || !want) return null;
+      var hit = null;
+      (function walk(n) {
+        (n.children || []).forEach(function (ch) {
+          if (hit) return;
+          if (ch.image && ch.image.sprite && ch.image.sprite.path === want) hit = ch;
+          else walk(ch);
+        });
+      })(root);
+      return hit;
+    }
+
+    function alignPlayItemToIntro() {
+      var d = itemComp();
+      var play = d && E.node(d.node);
+      var intro = play && introTwinOf(play);
+      if (!intro) return;
+      var p = E.stagePos(intro.id);
+      E.setStagePos(play.id, p[0], p[1]);
+      d.rehome();                    // a released drag returns here now
+    }
 
     // ------------------------------------------------------------- flow -----
     function tutorialFlow(tok) {
       return playInstructionAndWait(f.instruction1, f.instruction1Audio, tok)
         .then(function () { return E.wait(0.5, tok); })
         .then(function () {
-          E.setActive(f.startitems, false);
           E.setActive(f.itemmain, true);
+          alignPlayItemToIntro();          // before the intro copy goes away
+          E.setActive(f.startitems, false);
           // "Place the toy boat on the balance" — start the idle clock from here
           Idle.poke();
           return playInstructionAndWait(f.instruction2, f.instruction2Audio, tok);
@@ -2048,12 +2119,34 @@ var Controllers = (function () {
 
     self.onLeftItemDragStarted = self.onLeftItemTouched;
 
+    /* The two Group_485 counters — the one the item starts on and the one the
+       sample block sits on — are part of the picture for the whole round. They
+       used to be taken away the instant the item was dropped in a pan, so the
+       table went bare while the child still had every block to add. They now go
+       only when Check is pressed, and come back if Try Again resumes the round.
+
+       The item's counter is a serialized field; the block's is not, so it is
+       taken from the sample block's parent, the same way glowSampleBlock finds
+       the sample itself. */
+    function blockCounterId() {
+      var s = sampleBlockId(), n = s && E.node(s);
+      return n && n.parent ? n.parent.id : null;
+    }
+    /* The + and − are siblings of the block counter rather than children of it,
+       so hiding the counter alone left them hovering over bare table. They are
+       already disabled by the time Check is pressed, so they go with it. */
+    function setCountersVisible(on) {
+      [f.Base1, blockCounterId(), f.plusButtonTarget, f.minusButtonTarget]
+        .forEach(function (id) {
+          if (id && E.node(id)) E.setActive(id, !!on);
+        });
+    }
+
     self.onLeftItemPlaced = function () {
       if (self.leftItemPlaced) return;
       self.leftItemPlaced = true;
       stopGhost();
       self.runner.stop('ghost');
-      E.setActive(f.Base1, false);
       var g = gm();
       if (g) g.setPlusMinusInteractableOnly(false);
       self.runner.run(playInstruction3ThenPlusHint);
@@ -2158,6 +2251,8 @@ var Controllers = (function () {
          cleared basket, a blank instruction bar and no spoken prompt. The
          result is captured before the reset so the intended branch fires. */
       var resultBefore = g ? g.lastResult : 'None';
+      // the round is live again, so the board goes back to how it plays
+      setCountersVisible(true);
       if (g) g.handleTryAgain();
       if (g && resultBefore === 'Less') {
         self.plusClicked = false;
@@ -2172,7 +2267,7 @@ var Controllers = (function () {
     register(hostId, 'WeightGameTutorialController', function start() {
       E.setActive(f.startitems, true);
       E.setActive(f.itemmain, false);
-      E.setActive(f.Base1, true);
+      setCountersVisible(true);
       if (f.gameOverPanel) E.setActive(f.gameOverPanel, false);
       E.setActive(f.instructionBar, true);
       E.setActive(f.tryAgainButton, false);
