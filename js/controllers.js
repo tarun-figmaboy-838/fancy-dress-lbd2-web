@@ -891,6 +891,14 @@ var Controllers = (function () {
        cannot look different.
        -------------------------------------------------------------------- */
     var BALANCE_PATHS = ['left ', 'Right', 'needle', 'plate'];
+
+    /* BallAnimation's last act is `m_IsActive 0` on `items /Item 1` at t 3.5 —
+       the right-hand Group_485 counter, and with it the sample cube and the
+       + / − that are parented to it. It fires the moment the third block lands,
+       so the table went bare while the child still had Check in front of them
+       and the bar was still saying "tap the + button". The clip is played
+       without those two curves; the counters now go on Next and nowhere else. */
+    var COUNTER_PATHS = ['items /Item 1', 'items /Item 1/cube'];
     self.tilt = 1;
 
     function setTutorialTilt(v) {
@@ -982,8 +990,9 @@ var Controllers = (function () {
         }, self.runner.fresh('bookAnim'));
       } else if (self.animState === 'Book animation' && step === 2) {
         self.animState = 'Ball Animation';
-        // the clip keeps its item/cube visibility work; the pans are ours now
-        anim.playExcept('BallAnimation', BALANCE_PATHS);
+        // the clip keeps its item visibility work; the pans and the counters
+        // are ours now
+        anim.playExcept('BallAnimation', BALANCE_PATHS.concat(COUNTER_PATHS));
       }
     }
 
@@ -1086,6 +1095,25 @@ var Controllers = (function () {
       return E.wait(0.3, tok);
     }
 
+    /* The + and −, enabled and greyed by one rule, the way the six levels do it
+       through updatePlusMinusState. A button that cannot be used has to look
+       that way: Unity greyed it through the Button's ColorTint transition,
+       which this port does not have, so the alpha is set explicitly. Each
+       button is its own CanvasGroup here — `minusCanvasGroup` is the minus
+       node itself, and the plus has no group in the scene at all. */
+    var ENABLED_ALPHA = 1, DISABLED_ALPHA = 0.5;
+
+    function setButtonEnabled(id, on) {
+      if (!id || !E.node(id)) return;
+      E.setInteractable(id, on);
+      E.setCanvasGroupAlpha(id, on ? ENABLED_ALPHA : DISABLED_ALPHA);
+    }
+
+    function setPlusMinusEnabled(on) {
+      setButtonEnabled(f.plusButton, on);
+      setButtonEnabled(f.minusButton, on);
+    }
+
     function onPlusButtonClicked() {
       if (self.currentCubeIndex >= (f.cubeSpawnPoints || []).length ||
           self.cubesPlaced >= TOTAL_CUBES) return;
@@ -1099,14 +1127,18 @@ var Controllers = (function () {
       // the block landing rather than all at once at the end
       animateTutorialTilt(tutorialTiltTarget(), 0.5);
 
-      if (self.cubesPlaced === 1) {
-        E.setInteractable(f.minusButton, true);
-        if (f.minusCanvasGroup) E.setCanvasGroupAlpha(f.minusCanvasGroup, 1);
-      }
+      if (self.cubesPlaced === 1) setButtonEnabled(f.minusButton, true);
       if (self.cubesPlaced < TOTAL_CUBES) {
         // the next + hint comes from the Idle watcher, not a 0.5 s re-show
         if (!self.checkButtonActivated) Idle.poke();
       } else {
+        /* The count is complete and Check is what comes next, so both buttons
+           are spent. They stay on screen with their counter — they simply stop
+           reading as tappable, the same disabled look the six levels give them.
+           `+` already ignored the tap (onPlusButtonClicked returns early) and
+           `−` never had a listener at all, so this only makes what they were
+           already doing visible. */
+        setPlusMinusEnabled(false);
         setStep(2);
         self.runner.run(function (t) { return enableCheckButtonWithHint(t); });
       }
@@ -1126,9 +1158,10 @@ var Controllers = (function () {
       E.setActive(f.checkButton, false);
       hideHintHand();
       self.runner.stop('checkHint');
-      // both Group_485 counters go together, and not before Check
-      E.setActive(f.Base1, false);
-      E.setActive(f.Base2, false);
+      /* Both Group_485 counters stay. They used to go the moment Check was
+         pressed, which took the table out from under the demonstration while
+         instructions 7 and 8 were still explaining it. They now go with the
+         scene, on Next. */
       // the tutorial's Check is only offered once the demo is right, so it is
       // the same success beat the six levels celebrate
       E.Audio.sfx('correct');
@@ -1157,7 +1190,7 @@ var Controllers = (function () {
           }
         })
         .then(function () {
-          // Base2 went with Base1 back at Check
+          // both counters are still up; Next is what takes them away
           E.setActive(f.nextButton, true);
           E.setInteractable(f.nextButton, true);
           Idle.prompt();
@@ -1181,17 +1214,16 @@ var Controllers = (function () {
         .then(function () { return E.wait(3, tok); })
         .then(function () { return fadeBar(true, 0.3, tok); })
         .then(function () {
-          // both counters stay up until Check, the same rule the six levels follow
+          // both counters stay up for the whole demonstration; Next ends it
           return typeWithAudio(f.instruction5, f.instruction5Audio, tok);
         })
         .then(function () { return E.wait(1, tok); })
         .then(function () {
-          E.setInteractable(f.minusButton, false);
-          if (f.minusCanvasGroup) E.setCanvasGroupAlpha(f.minusCanvasGroup, 0.5);
+          setButtonEnabled(f.minusButton, false);
           return typeWithAudio(f.instruction6, f.instruction6Audio, tok);
         })
         .then(function () {
-          E.setInteractable(f.plusButton, true);
+          setButtonEnabled(f.plusButton, true);
           // "Tap the + button to add blocks" — light the block being counted
           glowSampleBlock(true);
           Idle.prompt();
@@ -1207,13 +1239,17 @@ var Controllers = (function () {
       E.setActive(f.Base1, true);
       E.setActive(f.Base2, true);
       E.setInteractable(f.bookButton, false);
-      E.setInteractable(f.plusButton, false);
+      // neither button can be used until instruction 6, so neither invites a tap
+      setPlusMinusEnabled(false);
       E.addClickListener(f.plusButton, onPlusButtonClicked);
       E.addClickListener(f.checkButton, onCheckButtonClicked);
       E.setInteractable(f.checkButton, false);
       E.addClickListener(f.nextButton, function () {
         src().stop();
         self.runner.stopAll();
+        // the counters are the last thing to go, and they go together
+        E.setActive(f.Base1, false);
+        E.setActive(f.Base2, false);
         Game.loadScene(fld(f, 'nextSceneIndex', 1));
       });
       Idle.register(offerIdleHint, function () {
@@ -2060,39 +2096,45 @@ var Controllers = (function () {
       setCountersVisible(false);     // the answer is in; the counters are done
     };
 
-    /* Every level draws its item twice: once in the Start Items display the
+    /* Every level draws its row twice: once in the Start Items display the
        level opens on, and once in the row the child actually plays with. The
-       two copies are authored a few units apart — between 4 and 11 across the
-       six levels — so the item visibly hopped sideways the moment the board
-       swapped from one to the other. The intro copy is what the child has been
-       looking at while the question was read, so the playable copy is landed
-       exactly there and the swap becomes invisible.
+       two were authored a few units apart — 4 to 11px on the item alone — so
+       everything on the counters hopped the moment the board swapped.
+
+       The playable row is the one that holds still: its positions were
+       measured from the rendered frame (js/layout-overrides.js section 3), so
+       the intro copies are landed on it, and never the other way round.
+       Aligning the other way is what discarded the measurement and left each
+       level's item wherever its intro copy happened to be authored.
 
        Matched on the sprite rather than the name, because only the artwork is
-       reliably the same on both sides. */
-    function introTwinOf(play) {
-      var root = f.startitems && E.node(f.startitems);
-      var want = play.image && play.image.sprite ? play.image.sprite.path : null;
-      if (!root || !want) return null;
-      var hit = null;
+       reliably the same on both sides. A sprite used twice in one row — the
+       two Group_485 counters — is skipped: artwork alone cannot say which is
+       which, and their positions are corrected in layout-overrides instead. */
+    function spriteIndex(rootId) {
+      var root = rootId && E.node(rootId), first = {}, twice = {};
+      if (!root) return first;
       (function walk(n) {
         (n.children || []).forEach(function (ch) {
-          if (hit) return;
-          if (ch.image && ch.image.sprite && ch.image.sprite.path === want) hit = ch;
-          else walk(ch);
+          var p = ch.image && ch.image.sprite ? ch.image.sprite.path : null;
+          if (p) { if (first[p]) twice[p] = 1; else first[p] = ch; }
+          walk(ch);
         });
       })(root);
-      return hit;
+      Object.keys(twice).forEach(function (p) { delete first[p]; });
+      return first;
     }
 
-    function alignPlayItemToIntro() {
-      var d = itemComp();
-      var play = d && E.node(d.node);
-      var intro = play && introTwinOf(play);
-      if (!intro) return;
-      var p = E.stagePos(intro.id);
-      E.setStagePos(play.id, p[0], p[1]);
-      d.rehome();                    // a released drag returns here now
+    /* Runs before the intro row is ever shown, so there is no frame in which
+       the two disagree. Idempotent — it sets an absolute target, so replaying
+       a level re-lands the copies on the same points. */
+    function alignIntroRowToPlay() {
+      var play = spriteIndex(f.itemmain), intro = spriteIndex(f.startitems);
+      Object.keys(intro).forEach(function (path) {
+        if (!play[path]) return;             // intro-only decoration, left alone
+        var p = E.stagePos(play[path].id);
+        E.setStagePos(intro[path].id, p[0], p[1]);
+      });
     }
 
     // ------------------------------------------------------------- flow -----
@@ -2101,7 +2143,6 @@ var Controllers = (function () {
         .then(function () { return E.wait(0.5, tok); })
         .then(function () {
           E.setActive(f.itemmain, true);
-          alignPlayItemToIntro();          // before the intro copy goes away
           E.setActive(f.startitems, false);
           // "Place the toy boat on the balance" — start the idle clock from here
           Idle.poke();
@@ -2265,6 +2306,7 @@ var Controllers = (function () {
     }
 
     register(hostId, 'WeightGameTutorialController', function start() {
+      alignIntroRowToPlay();         // before either row is on screen
       E.setActive(f.startitems, true);
       E.setActive(f.itemmain, false);
       setCountersVisible(true);

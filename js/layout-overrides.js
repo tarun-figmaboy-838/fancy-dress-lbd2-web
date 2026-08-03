@@ -8,6 +8,15 @@
  *  Values are Unity RectTransform values, exactly as the God Mode panel reports
  *  them (Shift + G -> pick an element -> read aPos X / Y). Copy them straight in.
  *
+ *  Ids are scene-local and twenty of them appear in BOTH scenes — Level 1 was
+ *  built from the tutorial, so `Canvas`, `controller`, `needle`, both arms, both
+ *  drop zones, the `items ` row and both counters carry the same id in each. An
+ *  entry for one of those lands on the other scene too unless it says which
+ *  scene it is for, so add `scene: 'Tutorial'` or `scene: 'Lbd2'` whenever the
+ *  value is not also correct for the twin. The eight Level 1 entries below that
+ *  hit a shared id were checked and are all no-ops in the tutorial, which is why
+ *  they carry no scene.
+ *
  *  Everything below came out of a measurement, not an eyeball — see
  *  QA_CHECKLIST.md section 10 for the numbers.
  * ========================================================================== */
@@ -83,7 +92,8 @@ window.LAYOUT_OVERRIDES = [
   { id: '1587350453',
     note: 'L3 watermelon  bottom 863 -> 861   centre 330.4 -> 326', anchoredPos: [1.6, 124.5] },
   { id: '873686364',
-    note: 'L4 pumpkin     bottom 859 -> 861   centre 334.4 -> 326', anchoredPos: [-0.4, 112.5] },
+    note: 'L4 pumpkin     bottom 859 -> 861   centre 334.4 -> 326  (+1, +1.82 for the plinth move in 8)',
+    anchoredPos: [0.6, 114.32] },
   { id: '1484843868',
     note: 'L5 shoe        bottom 865 -> 861   centre 346.2 -> 326', anchoredPos: [-5.2, 91.5],
     sizeDelta: [634, 423] },
@@ -92,20 +102,24 @@ window.LAYOUT_OVERRIDES = [
     sizeDelta: [634, 423] },
 
   /* -------------------------------------------------------------------------
-     4. The decorative item copy under `Start Items`.
+     4. The decorative copies under `Start Items` — no longer listed here.
 
      Each level shows a still copy of its item on the plinth until the first
      instruction finishes and the real, draggable row takes over. Those copies
-     carry their own coordinates and drifted the same way — a 24.5px spread —
-     so the item appeared to hop the moment the row swapped. Same line, same
-     arithmetic.
+     used to carry six hand-written positions of their own, and keeping two
+     sets of numbers in step by hand did not survive first contact: the swap
+     was later made to snap the playable item onto the intro copy, which threw
+     away every measured value in section 3 and left the item wherever the
+     intro copy happened to be authored — 4 to 11px off, the boat worst at
+     10.7px, and no two levels agreeing.
+
+     The copies are now landed on their playable twins at runtime instead, by
+     `alignIntroRowToPlay` in js/controllers.js, so the measured value above is
+     the only number for each item and the swap moves nothing by construction.
+     That covers the item, the sample block and the + / - buttons in one pass.
+     Nothing to list here; the entry is kept so the numbering still matches
+     QA_CHECKLIST.md section 10.
      --------------------------------------------------------------------- */
-  { id: '8735811446667022693', note: 'L1 start copy, boat',       anchoredPos: [8, 106] },
-  { id: '8735811444812058264', note: 'L2 start copy, orange',     anchoredPos: [13, 109.5] },
-  { id: '284409989',           note: 'L3 start copy, watermelon', anchoredPos: [6, 122.5] },
-  { id: '1419276867',          note: 'L4 start copy, pumpkin',    anchoredPos: [8, 114.5] },
-  { id: '434464500',           note: 'L5 start copy, shoe',       anchoredPos: [6, 87.5] },
-  { id: '754009483',           note: 'L6 start copy, cup',        anchoredPos: [6, 94.5] },
 
   /* -------------------------------------------------------------------------
      5. Level 1 drew the whole balance ~3% smaller than every other level.
@@ -154,16 +168,92 @@ window.LAYOUT_OVERRIDES = [
   { id: '717215848',   note: 'L3 arrow target (was 100)', anchoredPos: [0, 80] },
   { id: '1318447100',  note: 'L4 arrow target (was 100)', anchoredPos: [0, 80] },
   { id: '1137182624',  note: 'L5 arrow target',           anchoredPos: [0, 80] },
-  { id: '1624096888',  note: 'L6 arrow target',           anchoredPos: [0, 80] }
+  { id: '1624096888',  note: 'L6 arrow target',           anchoredPos: [0, 80] },
+
+  /* -------------------------------------------------------------------------
+     8. The two Group_485 counters themselves — Level 4.
+
+     The plinths the item and the sample block stand on are authored
+     [-634, -6.82] and [595, -6.82] in the tutorial and in five of the six
+     levels. Level 4 alone uses [-633, -5] and [594, -7.5], so on entering it
+     the left counter slid 1px right and 1.8px up and the right one 1px left
+     and 0.7px down, carrying whatever stood on them. Small, but it is a large
+     piece of furniture and it moves under a stationary item.
+
+     The item's measured position in section 3 was measured against Level 4's
+     own displaced plinth, so it is compensated by the same amount there and
+     stays exactly where the frame measurement put it.
+     --------------------------------------------------------------------- */
+  { id: '1673506048', note: 'L4 left counter  (was [-633, -5])',   anchoredPos: [-634, -6.82] },
+  { id: '1723979954', note: 'L4 right counter (was [594, -7.5])',  anchoredPos: [595, -6.82] },
+
+  /* -------------------------------------------------------------------------
+     9. The sample block on the right-hand counter.
+
+     The block, ball or marble beside the + and - is authored at y 83, 84.2,
+     83.6, 83.2, 85 and 86 in the six playable rows, while all six intro copies
+     agree on [0, 84]. So it drifted 3px across the levels and, because the two
+     rows disagree within a level too, twitched again at the swap.
+
+     [0, 84] is the intro value, the mode of the playable ones and the middle
+     of their range. Level 4's is quoted against its corrected plinth in 8, so
+     all six now land on one point.
+     --------------------------------------------------------------------- */
+  { id: 'P4431814043077341934_835674479941016348',
+    note: 'L1 sample block (was y 83)',   anchoredPos: [0, 84] },
+  { id: '6430041245335531354',
+    note: 'L2 sample block (was [-1.2, 84.2])', anchoredPos: [0, 84] },
+  { id: '1301899156', note: 'L3 sample block (was y 83.6)', anchoredPos: [0, 84] },
+  { id: '412690158',  note: 'L4 sample block (was y 83.2)', anchoredPos: [0, 84] },
+  { id: '1910679753', note: 'L5 sample block (was y 85)',   anchoredPos: [0, 84] },
+  { id: '934359594',  note: 'L6 sample block (was y 86)',   anchoredPos: [0, 84] },
+
+  /* -------------------------------------------------------------------------
+     10. The tutorial's counters, so the first screen change moves nothing.
+
+     The tutorial is a separate scene and its gameplay group is composed on its
+     own, but the two counters land within a pixel of the levels' — near enough
+     that the remaining difference reads as a jolt rather than as a different
+     screen. Measured in stage space with the whole ancestor chain applied:
+
+         left counter    tutorial (-1594, -861.82)   levels (-1594, -861)
+         right counter   tutorial (-362,  -870)      levels (-365,  -861)
+         sample block    tutorial (-356,  -800)      levels (-365,  -777)
+
+     So the right counter sat 3px right and 9px low, and the cube on it 9px
+     right and 22px low — and that cube is the same 218x218 artwork Level 5
+     uses for its ball, so the two are directly comparable and 22px apart.
+
+     The counters are brought onto the levels' points and the cube onto the
+     levels' [0, 84]. The + and - buttons are children of the right counter
+     here, where the levels make them siblings, so they would otherwise ride
+     the counter's move; they are given the levels' stage positions instead.
+
+     Both counters carry the same id as Level 1's, so every entry here is
+     pinned to the tutorial. Without that the first two would drag Level 1's
+     counters 0.82px off the line the other five sit on.
+     --------------------------------------------------------------------- */
+  { id: '869446491', scene: 'Tutorial',
+    note: 'tutorial left counter (was [-634, -6.82]) -> the levels\' line', anchoredPos: [-634, -6] },
+  { id: '996004441', scene: 'Tutorial',
+    note: 'tutorial right counter (was [598, -15])',                        anchoredPos: [595, -6] },
+  { id: 'P4990759318186539232_5876910138987210187', scene: 'Tutorial',
+    note: 'tutorial cube (was [6, 70]) -> the levels\' sample block',        anchoredPos: [0, 84] },
+  { id: '1076061892', scene: 'Tutorial',
+    note: 'tutorial + (was [119, -50])',                                    anchoredPos: [127, -59.68] },
+  { id: '1399306987', scene: 'Tutorial',
+    note: 'tutorial - (was [-94, -54])',                                    anchoredPos: [-98, -62.93] }
 ];
 
 /* Applied by Game.loadScene(). Kept as a plain function on window so deleting
    this one file drops every override. */
 window.applyLayoutOverrides = function () {
   var list = window.LAYOUT_OVERRIDES || [];
+  var scene = document.body.dataset.scene;     // set by loadScene just before this
   var applied = 0;
   for (var i = 0; i < list.length; i++) {
     var o = list[i];
+    if (o.scene && o.scene !== scene) continue;  // written for the twin scene
     if (!Engine.node(o.id)) continue;          // node belongs to the other scene
     if (o.anchoredPos) Engine.setAnchoredPos(o.id, o.anchoredPos[0], o.anchoredPos[1]);
     if (o.sizeDelta) Engine.setSizeDelta(o.id, o.sizeDelta[0], o.sizeDelta[1]);

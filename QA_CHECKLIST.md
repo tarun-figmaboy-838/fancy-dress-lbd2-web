@@ -105,6 +105,13 @@ Viewports: 1280×720 · 1366×768 · 1920×1080 · 1024×768 · 1440×900 · 160
 * [x] Screen position preserved across the re-parent, then eased 0.26 s to rest.
 * [x] Invalid drops glide home over 0.28 s, falling back to the canvas root if the origin was hidden.
 * [x] One `placeItemInPan` serves the tutorial and every level.
+* [x] **Tutorial:** both `Group_485` counters stay up until **Next**. — *two separate things were taking them away early, and only fixing both was enough*
+  * `onCheckButtonClicked` hid them on Check, while instructions 7 and 8 were still explaining what had been on the table.
+  * The **right** counter went earlier still, and not from controller code at all: `BallAnimation` carries `m_IsActive 0` on `items /Item 1` at t 3.5, and the clip starts the moment the third block lands. The counter, the sample cube and the `+` / `−` parented to it all vanished while the bar still read *"Tap the + button to add blocks!"* — with no `+` on screen to tap. Played through `playExcept` now, so the clip keeps its item work and the counters are the controller's.
+* [x] Nothing else in the scene can hide them. — *the tutorial runs `TutorialManager` alone; no `WeightGameTutorialController`, and `samplePose` is path-filtered to the balance*
+* [x] **Tutorial:** `+` and `−` grey out once the last block is placed. — *both were still bright and tappable-looking with the count complete. `+` already ignored the tap and `−` never had a listener, so this only makes the real state visible*
+* [x] They are also greyed before instruction 6, when neither can be used yet.
+* [ ] The six levels still drop their counters on **Check** (`setCountersVisible(false)`), so tutorial and levels now differ on this beat. Left as-is — only the tutorial was asked for.
 
 ## 9 · Idle guidance
 
@@ -171,6 +178,50 @@ an 8px spread, because the artwork has soft edges the alpha threshold missed.
 * [x] Centring uses the intensity-weighted centre, not the bounding box. — *for a boat with sails on one side and a hull on the other those differ by 17px, and the weighted one is what reads as the middle*
 * [x] The `Start Items` decorative copies share the same line. — *they had drifted 24.5px, so the item hopped the moment the real row took over*
 * [ ] Level 5 and 6 keep the values supplied from God Mode. — **superseded, flagged.** The supplied `14.98, 71` put the shoe 20px right of its plinth and 16.5px below the group; `6, 100.5` put the cup 6px above it. The measurement won. Each is one number in `js/layout-overrides.js` if either look was deliberate.
+
+### Nothing on the counters moves between screens
+
+The measurement above was being thrown away at run time. The swap from the
+`Start Items` display to the playable row snapped the **playable** item onto the
+**decorative** copy, so what reached the screen was never the measured position
+but whatever the intro copy happened to be authored at — 4 to 11px off, the
+Level 1 boat worst at 10.7px, and no two levels agreeing. That is the item that
+looked like it was moving from level to level.
+
+The alignment now runs the other way and before either row is shown
+(`alignIntroRowToPlay`), so the measured playable row is the one that holds
+still and the copies are landed on it. Matching is by sprite, which covers the
+item, the sample block and both buttons in one pass; a sprite used twice in a
+row — the two `Group_485` counters — is skipped and corrected in the overrides
+instead. Verified by walking the full ancestor chain for all 13 rows across the
+seven screens:
+
+| | before | after |
+|---|---|---|
+| item at the swap | 4 – 11.2px | **0** in all six |
+| left counter `Group_485` | L4 alone at `[-633, -5]` | **one point**, 13/13 rows |
+| right counter `Group_485` | L4 `[594, -7.5]`, tutorial `[598, -15]` | **one point**, 13/13 rows |
+| sample block | y 83 – 86, and 0.4 – 2px again at the swap | **one point**, 7 screens |
+| tutorial sample cube | 9px right, 22px low vs the levels' — *same 218×218 artwork as Level 5's* | **on the levels' point** |
+| `+` and `−` | 1.18px at the swap | **one point**, 7 screens |
+
+* [x] Both counters are in the same place on every screen, tutorial included.
+* [x] Nothing on either counter moves when the row swaps. — *24/24 pairs at 0*
+* [x] The sample block is in one place across all seven screens.
+* [x] The measured item positions are what actually reach the screen. — *the run-time alignment can no longer discard them; it only ever moves the decorative copy*
+* [x] Item box centres still differ per level. — *expected: the artwork differs, and the measurement puts each item's **visible** centre on 326, not its box centre*
+* [ ] The tutorial's own item is a different asset (`image_44_1`, 685×430) and has never been frame-measured, so its box centre sits ~7px right of the levels'. Flagged, not guessed at — it needs the screenshot pass, not arithmetic.
+* [ ] The intro row carries a `Rectangle_64_1_` card behind the sample block that the playable row has no copy of, so it disappears at the swap. Authored that way in all six; left alone.
+
+### Ids are scene-local, and twenty of them collide
+
+Level 1 was built from the tutorial, so `Canvas`, `controller`, `needle`, both
+arms, both drop zones, the `items ` row and **both counters** carry the same id
+in each scene. An override for one lands on the other unless it names a scene.
+
+* [x] The eight existing Level 1 entries that hit a shared id were checked one
+  by one against the tutorial's authored values. — *all eight are no-ops there; the values were chosen to match the tutorial in the first place*
+* [x] Entries that are not also correct for the twin carry `scene:`. — *the five tutorial counter entries; without it the first two would drag Level 1's counters 0.82px off the line*
 
 ### Where corrections live
 

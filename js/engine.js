@@ -630,8 +630,16 @@ var Engine = (function () {
   }
   function isInteractable(id) { var n = node(id); return !!(n && n.button && n.button.interactable); }
 
+  /* Unity greys a non-interactable Button through the ColorTint transition,
+     which this port does not implement, so callers dim buttons through their
+     CanvasGroup instead. Most buttons in the scenes carry one; the tutorial's
+     `+` does not, and the call used to be a silent no-op that left a dead
+     button looking live. One is made on demand — alpha 1 and fully raycasting,
+     so a node that gets one behaves exactly as it did until something sets an
+     alpha on it. */
   function setCanvasGroupAlpha(id, a) {
-    var n = node(id); if (!n || !n.canvasGroup) return;
+    var n = node(id); if (!n) return;
+    if (!n.canvasGroup) n.canvasGroup = { alpha: 1, interactable: true, blocksRaycasts: true };
     n.canvasGroup.alpha = a; n.el.style.opacity = String(a);
   }
   function setBlocksRaycasts(id, on) {
