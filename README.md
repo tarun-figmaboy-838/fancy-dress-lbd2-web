@@ -378,6 +378,16 @@ child gets a cleared basket and an enabled **+** button but no spoken prompt.
 The too-many path is unaffected — it plays instruction 7 and shows the minus
 hint correctly.
 
-Level 6's instruction 7 also reads "Tap the **+** to reduce the marbels!" where
-the other levels say "−"; the audio clip is the minus one. Text is used exactly
-as authored.
+Level 6's instruction 7 also reads "Tap the **+** to reduce the marbles!" where
+the other levels say "−"; the audio clip is the minus one. The **+**/**−** slip
+is used exactly as authored.
+
+The authored text spelled it "marbels" throughout the two marble levels —
+Level 2 (the orange) and Level 6 (the cup) — that is corrected to "marbles" in
+`js/data.js`, in both the node graph and the `WeightGameTutorialController`
+block, which each carry their own copy of the strings. The two audio files are
+still named
+`tap_the_plus_button_to_add_marbels_.ogg` and
+`tap_the_minus_button_to_reduce_the_marbels.ogg` on disk, so those paths keep
+the old spelling. Re-extracting `data.js` from Unity will bring the typo back
+unless it is fixed upstream too.
