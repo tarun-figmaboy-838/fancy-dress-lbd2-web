@@ -1018,6 +1018,42 @@ var Engine = (function () {
       return ctx;
     }
 
+    /* ---- unlocking output -----------------------------------------------
+       iOS Safari, and Chrome on Android under some settings, hand back an
+       AudioContext that exists and reports itself running but stays SILENT
+       until a real source has been started inside a genuine user gesture.
+       Creating the context lazily inside sfx() is too late there: the tap that
+       should make a sound is the same tap that creates the context, and on
+       those browsers that first one is swallowed. Every effect after it can be
+       swallowed too, because nothing has ever unlocked output.
+
+       So the very first gesture anywhere on the page builds the context and
+       pushes one silent sample through it, which is what actually opens the
+       tap. It costs nothing, happens once, and unregisters itself. */
+    var unlocked = false;
+    function unlockAudio() {
+      if (unlocked) return;
+      var c = audioCtx();
+      if (!c) return;
+      try {
+        var b = c.createBuffer(1, 1, 22050);
+        var s = c.createBufferSource();
+        s.buffer = b;
+        s.connect(c.destination);
+        if (s.start) s.start(0); else if (s.noteOn) s.noteOn(0);
+        unlocked = true;
+      } catch (e) { return; }
+      UNLOCK_EVENTS.forEach(function (ev) {
+        window.removeEventListener(ev, unlockAudio, true);
+      });
+    }
+    var UNLOCK_EVENTS = ['pointerdown', 'touchend', 'mousedown', 'keydown'];
+    if (typeof window !== 'undefined') {
+      UNLOCK_EVENTS.forEach(function (ev) {
+        window.addEventListener(ev, unlockAudio, true);
+      });
+    }
+
     /* the shared echo bus, built once per context */
     function bus(c) {
       if (sfxBus && sfxBus.ctx === c) return sfxBus.out;
@@ -1225,6 +1261,18 @@ var Engine = (function () {
       sfxEnabled: function () { return sfxOn; },
       setSfxVolume: function (v) { sfxVolume = Math.max(0, Math.min(1, v)); },
       sfxNames: function () { return Object.keys(STINGS); },
+      /* Everything needed to tell why a sound was not heard, in one call:
+         Engine.Audio.sfxState() */
+      sfxState: function () {
+        return {
+          enabled: sfxOn,
+          volume: sfxVolume,
+          unlocked: unlocked,
+          contextState: ctx ? ctx.state : 'not created yet',
+          webAudio: !!(window.AudioContext || window.webkitAudioContext),
+          sounds: Object.keys(STINGS)
+        };
+      },
       sourcePlay: function (id) { source(id).play(); },
       sourceStop: function (id) { source(id).stop(); },
       reset: function () { sources = {}; }

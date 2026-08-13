@@ -296,11 +296,22 @@
       /* Play every interaction sound in turn, so the layer can be heard
          without having to reach the moment in the game that triggers each one. */
       sfx: function () {
+        var st = Engine.Audio.sfxState ? Engine.Audio.sfxState() : null;
+        if (st) {
+          console.log('[sfx]', st);
+          if (!st.webAudio) { U.toast('this browser has no Web Audio at all'); return; }
+          if (!st.enabled) { U.toast('sfx are switched off (Engine.Audio.setSfx(true))'); return; }
+        }
         var names = Engine.Audio.sfxNames ? Engine.Audio.sfxNames() : [];
         if (!names.length) { U.toast('no sfx registered'); return; }
         var i = 0;
         (function nextOne() {
-          if (i >= names.length) { U.toast('played ' + names.length + ' sounds'); return; }
+          if (i >= names.length) {
+            var s2 = Engine.Audio.sfxState ? Engine.Audio.sfxState() : {};
+            U.toast('played ' + names.length + ' — context ' + (s2.contextState || '?') +
+                    ', unlocked ' + s2.unlocked + ', vol ' + s2.volume);
+            return;
+          }
           var n = names[i++];
           U.toast('sfx: ' + n);
           Engine.Audio.sfx(n, { i: i });   // the counting sounds walk up the scale
