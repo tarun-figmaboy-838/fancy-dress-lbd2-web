@@ -160,7 +160,8 @@ behind: no cursor, no flash, no click. Nothing moves and nothing changes size.</
 <b>draggable item</b> (claims its node, so dragging is unaffected; becomes inert only
 once it is resting in a pan), <b>spawned blocks</b> (two prefabs carry an empty Button,
 one carries none), and the <b>tutorial's &minus;</b>, which had no listener in the
-original or here and used to light up after the first block and do nothing.</p>
+original and used to light up after the first block and do nothing — it now
+<b>removes a block</b>, the way the six levels do.</p>
 </div>
 
 <div class="bug">
@@ -327,10 +328,18 @@ the echo bus is kept for the celebration, since echo on a repeated tap becomes m
 pentatonic per block, so <em>the count is audible as well as visible</em> — which is the
 subject of the game. A pentatonic was chosen because it has no interval that can sound
 wrong whichever order the notes arrive in.</p>
-<p style="margin-bottom:0">Every call is fire-and-forget and wrapped so a sound can never
-break a game action; if the browser refuses an audio context, the game behaves exactly as
-before. The whole layer can be switched off at runtime with
-<code>Engine.Audio.setSfx(false)</code>.</p>
+<p>Every call is fire-and-forget and wrapped so a sound can never break a game action; if
+the browser refuses an audio context, the game behaves exactly as before. The layer
+switches off with <code>Engine.Audio.setSfx(false)</code> and its level against the
+voice-over is one number, <code>Engine.Audio.setSfxVolume(v)</code>. God Mode has a
+<b>Play all SFX</b> button that auditions every sound in turn.</p>
+<p style="margin-bottom:0"><b>One bug found after the first attempt.</b>
+<code>AudioContext.resume()</code> is asynchronous, and a suspended context has a frozen
+clock — so scheduling against <code>currentTime</code> before it had actually started put
+the whole envelope in the past and the sound was never produced. The first effect after a
+tab regained focus was silent for exactly this reason. <code>sfx()</code> now waits for
+the resume before it plays, and the levels, which were set at about half the success
+sting's, were roughly doubled.</p>
 </div>
 
 <h2>New regression guards</h2>
@@ -369,9 +378,10 @@ headless run, against the live build.</p>
 <h2>Notes worth knowing</h2>
 <ul>
   <li><b>Two deliberate behaviour changes</b>, both flagged rather than slipped in: the
-  tutorial's &minus; now stays greyed for the whole demo (it has no function there, in
-  the original or here), and tapping the start-screen background no longer dims the whole
-  picture (it still plays the title line).</li>
+  tutorial's &minus; now <b>works</b> — it had no listener in the original, so it did
+  nothing at all while being lit from the first block onward — and tapping the
+  start-screen background no longer dims the whole picture (it still plays the title
+  line).</li>
   <li><b>Level 1 authors a disabled alpha of 0.6 where levels 2&ndash;6 use 0.4.</b> Both
   read clearly as disabled now that colour is drained, so this is not a bug — but Level 1's
   greyed buttons are slightly more visible than the others'. Not changed.</li>

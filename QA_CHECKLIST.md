@@ -329,7 +329,13 @@ call or an `addClickListener`):
   it draggable again.
 * [ ] +, −, Check, Next, Try Again and Let's Go all still respond, in every
   level, including levels reached later — they arm on activation, not at load.
-* [ ] The tutorial's `−` stays greyed for the whole demo and never flashes.
+* [ ] **The tutorial's `−` removes a block.** — *it had no listener in the
+  original, so it did nothing while being lit from the first block onward*
+  * [ ] It lights only once there is a block to remove, and dims again at zero.
+  * [ ] The pile re-centres and the pans ease back by one block's step.
+  * [ ] It cannot be pressed at three blocks, where `BallAnimation` and Check
+    take over — that clip is one-way.
+  * [ ] Rapid `+`/`−` tapping cannot desync the count or the tilt.
 * [ ] God Mode: cursor edit still picks scenery; bounds draws it grey.
 * [ ] Title-voice button: top-left of the start screen, plays and stops the
   title line, waves animate while speaking, invitation ring stops after first

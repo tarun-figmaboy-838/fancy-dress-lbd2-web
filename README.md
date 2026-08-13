@@ -267,12 +267,14 @@ Three things sit outside that rule and are named explicitly:
 - **Spawned blocks.** The `cube` and `Glass_ball` prefabs carry an empty
   `Button` and the `Ball` prefab carries none, so every block the child adds was
   clickable in four levels and inert in two. Both are made scenery the same way.
-- **The tutorial's `−`.** It has no listener in the original and none here — the
-  demo is *add three blocks*, and nothing ever asks for one back. It used to
-  light up the moment the first block landed, so from then on it looked exactly
-  as tappable as the `+` and did nothing at all. It now stays greyed for the
-  whole demo. The six levels are untouched: there the `−` really does remove a
-  block and `updatePlusMinusState` lights it exactly when it can.
+- **The tutorial's `−`.** It had no listener in the original, so it did nothing
+  at all — and it was lit from the first block onward regardless, which is a
+  control inviting a tap it cannot answer. **It now removes a block**, the way
+  the six levels do: the pile re-centres, the pans ease back by exactly the step
+  the block put in, and the block animates home to the sample it came from. It
+  can only ever run at one or two blocks — at three, `onPlusButtonClicked`
+  disables both buttons and hands over to `BallAnimation` and Check, and that
+  clip is one-way, so the scripted sequence is never re-entered backwards.
 
 God Mode is unaffected — cursor edit outranks the inline `pointer-events` with
 an `!important` rule, so scenery can still be picked off the screen, and the
