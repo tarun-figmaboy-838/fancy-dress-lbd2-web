@@ -201,9 +201,15 @@ over the plates and arms, each carrying an empty Button. The start screen was th
 half: <code>Intro</code> is anchored <code>0,0&nbsp;&rarr;&nbsp;1,1</code>, so the whole
 1920&times;1080 picture was a Button claiming a pointer cursor, and because
 <code>cursor</code> inherits, everything inside it did too. Any Button covering half the
-canvas or more is now treated as a backdrop: still clickable, no cursor, no feedback.
-The threshold is measured, not guessed — the largest real control in either scene is
-Let's Go at <b>8.5%</b> of the canvas.</p>
+canvas or more is now treated as a backdrop: no cursor, no feedback. The threshold is
+measured, not guessed — the largest real control in either scene is Let's Go at
+<b>8.5%</b> of the canvas.</p>
+<p>It no longer answers taps either. That full-screen button's only job was to play the
+title line, which made the whole banner a hair-trigger — a tap anywhere, reaching for
+Let's&nbsp;Go or just steadying the tablet, restarted the line over whatever was already
+speaking. The voice-over button takes the job over and switches the backdrop off, and
+only once it is actually on screen, so a missing clip leaves the authored behaviour as
+the fallback rather than making the line unreachable.</p>
 <p>One hand deliberately stays: <code>grab</code> on the item while it is waiting to be
 placed. Dragging it onto the balance is the whole mechanic, and the instruction bar
 literally asks for it. It is a different cursor from <code>pointer</code>, it appears

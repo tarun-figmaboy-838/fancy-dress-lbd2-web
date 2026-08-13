@@ -656,6 +656,18 @@ var Controllers = (function () {
       });
       layer.appendChild(el);
 
+      /* The start screen is itself a Button, anchored 0,0 -> 1,1, whose only
+         job is Play() on this same source. That made the entire banner a
+         hair-trigger: a tap anywhere — reaching for Let's Go, steadying the
+         tablet, a stray finger — restarted the title line over whatever was
+         already speaking. Now that there is a control that says what it does,
+         it takes that job over and the backdrop stops answering taps at all.
+
+         Switched off only once the button is actually on screen, so if the clip
+         or the overlay were ever missing the authored behaviour is still there
+         as the fallback rather than the line becoming unreachable. */
+      E.setInteractable(srcId, false);
+
       acc = 0; ticker = watch; E.add(ticker);
       paint();
       return true;

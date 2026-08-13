@@ -326,10 +326,17 @@ Three things it deliberately does *not* do:
   brightened the *entire screen* whenever the mouse was anywhere on it — which
   is always — and it was already dimming the whole picture on every tap, and
   showing a pointer cursor over every pixel. `wireButton` now marks any Button
-  covering half the canvas or more as a backdrop: still clickable, no cursor, no
-  feedback. It is a measurement, not a list — the largest real control in either
-  scene is Let's Go at **8.5%** of the canvas, so the 50% threshold cannot
-  catch one.
+  covering half the canvas or more as a backdrop: no cursor, no feedback. It is
+  a measurement, not a list — the largest real control in either scene is Let's
+  Go at **8.5%** of the canvas, so the 50% threshold cannot catch one.
+
+  It no longer answers taps at all, either. That full-screen button's only job
+  was `Play()` on the title line, which made the whole banner a hair-trigger:
+  a tap anywhere — reaching for Let's Go, steadying the tablet, a stray finger —
+  restarted the line over whatever was already speaking. The voice-over button
+  takes that job over and switches the backdrop off, but only once it is
+  actually on screen, so a missing clip leaves the authored behaviour as the
+  fallback rather than making the line unreachable.
 
   **The draggable item carries a Button too, and its `interactable` flag is
   inconsistent in the source data** — `0` in levels 1 and 2, `1` in levels 3 to
