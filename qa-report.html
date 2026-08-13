@@ -282,12 +282,15 @@ blue with nothing to remove.</p>
   </tbody>
 </table>
 </div>
-<p>Dimming alone was not enough: the authored disabled alpha turns a blue button into a
-<em>paler blue</em>, which at a glance is still the live control it is drawn as. Draining
-the colour is what makes it read as grey, so a disabled control also takes
-<code>grayscale(0.9)</code>. Audited: <b>15 nodes can take the disabled look and all 15
-are real controls</b> — the exclusions are what stop it greying the boat, the orange and
-the tutorial's book, whose Buttons are authored non-interactable.</p>
+<p>A switched-off control <b>fades</b> — it keeps its own colour and simply recedes.
+Draining the colour to grey was tried first and rejected on review: it read as a
+different, broken-looking button rather than as the same one waiting its turn.</p>
+<p>The fade depth is one number for the whole game, <code>0.4</code>, because it is the
+<em>only</em> signal that a button is unavailable and so has to be unmistakable and
+identical everywhere. The scenes disagreed — Level 1 authored <code>0.6</code>, levels
+2&ndash;6 <code>0.4</code>, the tutorial <code>0.5</code> — so a disabled button was
+visibly more present in Level 1 than in the level after it. Switching on eases rather
+than cutting.</p>
 <p><b>Scope:</b> all six levels had this, through three separate per-level routes. The
 tutorial did <em>not</em> — its controller always set alpha alongside interactable.</p>
 </div>

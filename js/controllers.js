@@ -58,6 +58,15 @@ var Controllers = (function () {
     return (f[key] === undefined || f[key] === null) ? dflt : f[key];
   }
 
+  /* How far a switched-off control fades. One number for the whole game: the
+     fade is now the only signal that a button is unavailable, so it has to be
+     deep enough to be unmistakable and the same on every screen. The scenes
+     disagree — Level 1 authors 0.6, levels 2-6 use 0.4 and the tutorial 0.5 —
+     which left a disabled button visibly more present in Level 1 than in the
+     level after it. 0.4 is the majority value and the clearest of the three. */
+  var DISABLED_ALPHA = 0.4;
+  var ENABLED_ALPHA = 1;
+
   // ------------------------------------------------------ coroutine runner --
   function Runner() { this.main = new E.TaskGroup(); this.named = {}; }
   Runner.prototype.fresh = function (n) {
@@ -1246,20 +1255,20 @@ var Controllers = (function () {
       return E.wait(0.3, tok);
     }
 
-    /* The + and −, enabled and greyed by one rule, the way the six levels do it
+    /* The + and −, faded and restored by one rule, the way the six levels do it
        through updatePlusMinusState. A button that cannot be used has to look
-       that way: Unity greyed it through the Button's ColorTint transition,
+       that way: Unity dimmed it through the Button's ColorTint transition,
        which this port does not have, so the alpha is set explicitly. Each
        button is its own CanvasGroup here — `minusCanvasGroup` is the minus
-       node itself, and the plus has no group in the scene at all. */
-    var ENABLED_ALPHA = 1, DISABLED_ALPHA = 0.5;
+       node itself, and the plus has no group in the scene at all.
 
+       It uses the game-wide DISABLED_ALPHA rather than a value of its own; the
+       tutorial authored 0.5 against the levels' 0.4, so a disabled button
+       changed depth between the tutorial and Level 1. */
     function setButtonEnabled(id, on) {
       if (!id || !E.node(id)) return;
       /* A button the tutorial manages is a control, even the `−` that stays off
-         for the whole demo. Without this it would be classed as scenery — it has
-         no listener — and take the dim but not the drained colour, so the two
-         buttons would sit side by side disabled and not look alike. Harmless:
+         for the whole demo, so it is not left classed as scenery. Harmless:
          non-interactable already blocks the press, the click and the hover. */
       E.setPassive(id, false);
       E.setInteractable(id, on);
@@ -1836,7 +1845,7 @@ var Controllers = (function () {
 
     function setButtonVisual(btnId, cgId, state) {
       E.setInteractable(btnId, state);
-      if (cgId) E.setCanvasGroupAlpha(cgId, state ? fld(f, 'enabledAlpha', 1) : fld(f, 'disabledAlpha', 0.4));
+      if (cgId) E.setCanvasGroupAlpha(cgId, state ? ENABLED_ALPHA : DISABLED_ALPHA);
     }
 
     self.enablePlusMinus = function () {
@@ -1863,9 +1872,9 @@ var Controllers = (function () {
       E.setInteractable(f.plusButton, canAdd);
       E.setInteractable(f.minusButton, canRemove);
       if (f.plusCanvasGroup)
-        E.setCanvasGroupAlpha(f.plusCanvasGroup, canAdd ? fld(f, 'enabledAlpha', 1) : fld(f, 'disabledAlpha', 0.4));
+        E.setCanvasGroupAlpha(f.plusCanvasGroup, canAdd ? ENABLED_ALPHA : DISABLED_ALPHA);
       if (f.minusCanvasGroup)
-        E.setCanvasGroupAlpha(f.minusCanvasGroup, canRemove ? fld(f, 'enabledAlpha', 1) : fld(f, 'disabledAlpha', 0.4));
+        E.setCanvasGroupAlpha(f.minusCanvasGroup, canRemove ? ENABLED_ALPHA : DISABLED_ALPHA);
     };
 
     /* Which pan the item went into, and therefore which pan the blocks use.

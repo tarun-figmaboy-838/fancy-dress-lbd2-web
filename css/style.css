@@ -169,22 +169,14 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
 }
 
 /* ---- disabled controls -------------------------------------------------- *
- * A control the game has switched off has to look switched off. The scenes
- * carry a `disabledAlpha` per level and the controllers apply it, but alpha
- * alone only makes a blue button a *paler* blue — at a glance it still reads as
- * the live control it is drawn as. Draining the colour is what makes it read as
- * grey, which is the state a child recognises.
+ * A control the game has switched off has to look switched off, and it does it
+ * by FADING — the button keeps its own colour and simply recedes. Draining the
+ * colour to grey was tried and read as a different, broken-looking button
+ * rather than the same one waiting its turn.
  *
- * On the sprite layer, so it cannot collide with the brightness the node itself
- * uses for hover and press — and excluded on exactly the nodes those two skip,
- * plus .is-glowing, so a highlighted button never loses its rim. Scenery is
- * left alone on purpose: it has no enabled state to be the opposite of, and
- * .nointeract lands on a lot of it (the tutorial's book among them, which is
- * artwork the clip carries into the pan). */
-.un.btn.nointeract:not(.passive):not(.draggable):not(.backdrop):not(.is-glowing) > .un-bg {
-  filter: grayscale(0.9);
-}
-/* so switching on reads as the button coming to life, not as a hard cut */
+ * The fade itself is the controllers' job (Engine.setCanvasGroupAlpha writes
+ * the node's opacity); all that is needed here is for it to ease rather than
+ * cut, so switching on reads as the button coming back to life. */
 .un.btn > .un-bg { transition: filter .16s ease-out; }
 
 @media (prefers-reduced-motion: reduce) {

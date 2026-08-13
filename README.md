@@ -479,20 +479,18 @@ judges each button on its own merits.
 | Check pressed | dim | dim |
 | Try Again, too few | **blue** | dim *(was blue)* |
 
-Dimming alone was not enough to read as *off*: the authored `disabledAlpha`
-turns a blue button into a **paler blue**, which at a glance is still the live
-control it is drawn as. Draining the colour is what makes it read as grey, so a
-disabled control also takes `grayscale(0.9)` — on the sprite layer, so it cannot
-collide with the brightness the node itself uses for hover and press, and behind
-the same exclusions those two use plus `.is-glowing`, so a highlighted button
-never loses its rim. Audited: **15 nodes can take the disabled look and all 15
-are real controls.** The four that are correctly spared are the draggable items
-in levels 1 and 2 (whose `Button` is authored non-interactable — greying them
-would grey the boat and the orange), and the tutorial's book, which is scenery
-the clip carries into the pan.
+A switched-off control **fades**: it keeps its own colour and simply recedes.
+Draining the colour to grey was tried first and rejected on review — it read as
+a different, broken-looking button rather than as the same one waiting its turn.
 
-Switching on fades rather than cutting, so the moment the child earns the button
-reads as it coming to life.
+The fade depth is now one number for the whole game, `DISABLED_ALPHA = 0.4`,
+because it is the *only* signal that a button is unavailable and so has to be
+unmistakable and identical everywhere. The scenes disagreed: Level 1 authored
+`0.6`, levels 2–6 `0.4`, the tutorial `0.5`, so a disabled button was visibly
+more present in Level 1 than in the level after it, and changed again between
+the tutorial and Level 1. `0.4` is the majority value and the clearest of the
+three. Switching on eases rather than cutting, so the moment the child earns the
+button reads as it coming back to life.
 
 ## Fixed in the third review
 
