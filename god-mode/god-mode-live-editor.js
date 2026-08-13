@@ -263,7 +263,9 @@
   P.hitTest = function (ev) {
     var el = document.elementFromPoint(ev.clientX, ev.clientY);
     if (!el) return null;
-    if (el.closest && el.closest('#godPanel, #godSelBox, #godBadge, #godToast')) return null;
+    // .intro-vo is a real control, not a scene node — picking it would only
+    // swallow the click and select the canvas root
+    if (el.closest && el.closest('#godPanel, #godSelBox, #godBadge, #godToast, .intro-vo')) return null;
     return U.nodeOf(el);
   };
 

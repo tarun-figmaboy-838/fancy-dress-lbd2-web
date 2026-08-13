@@ -145,6 +145,8 @@
     }
     Controllers.returnItemToOrigin(it.node, it.startParent, it.startPos, it.homeStage);
     it.dropped = false; it.enabledComp = true;
+    // a spent item is passive; putting it back has to make it a drag target again
+    if (it.refreshCursor) it.refreshCursor();
     U.toast('item returned home');
   };
 
@@ -306,6 +308,8 @@
       qaPlace: function () { self.qa.placement(); },
       qaScale: function () { self.qa.scaleMechanics(); },
       qaLayout: function () { self.qa.layout(); },
+      qaCursors: function () { self.qa.cursors(); },
+      qaPress: function () { self.qa.press(); },
       qaCopy: function () { self.qa.copyReport(); }
     };
 
@@ -447,7 +451,8 @@
     '<section><h4>QA</h4><div class="godRow"><button data-act="qaAll">Run all</button>' +
     '<button data-act="qaSmoke">Smoke</button><button data-act="qaAssets">Assets</button>' +
     '<button data-act="qaPlace">Placement</button><button data-act="qaScale">Scale</button>' +
-    '<button data-act="qaLayout">Layout</button><button data-act="qaCopy">Copy report</button></div>' +
+    '<button data-act="qaLayout">Layout</button><button data-act="qaCursors">Cursors</button>' +
+    '<button data-act="qaPress">Press</button><button data-act="qaCopy">Copy report</button></div>' +
     '<pre id="godQaOut"></pre></section></div></div>';
 
   // ------------------------------------------------------------------ start --

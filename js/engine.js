@@ -330,6 +330,10 @@ var Engine = (function () {
     if (!this.image && !this.tmp && !this.button) pe = false;
     if (this.button) pe = true;
     if (this.canvasGroup && !this.canvasGroup.blocksRaycasts) pe = false;
+    /* Passive overrides every rule above, including the Button one: the node is
+       scenery, not a control, so it must not be hit-tested at all. Decided here
+       rather than in CSS so a later applyPointer() cannot quietly bring it back. */
+    if (this.passive) pe = false;
     if (this.hitEl) {
       this.el.style.pointerEvents = 'none';
       this.hitEl.style.pointerEvents = pe ? 'auto' : 'none';
@@ -630,6 +634,49 @@ var Engine = (function () {
   }
   function isInteractable(id) { var n = node(id); return !!(n && n.button && n.button.interactable); }
 
+  /* ------------------------------------------------------------------------
+     Passive nodes — artwork that must not behave like a control.
+
+     Unity attaches a Button to a great many things that are only ever pictures:
+     the sample block beside the +/- buttons, the intro copies of the item and
+     of the +/-, the alpha-0 slot markers inside both pans, the spawned block
+     prefabs, the tutorial's book. Every one of them has an empty onClick list
+     and no script ever listens to it, yet this port was giving them the whole
+     control treatment — pointer cursor plus the ColorTint press flash — so
+     tapping the block did something visible while doing nothing at all. That
+     teaches a child the wrong thing while the bar is saying "Tap the + button".
+
+     A passive node is dropped from hit testing entirely (see applyPointer), so
+     the tap falls through to the artwork behind it: no cursor change, no press
+     flash, no click. Nothing about how it looks or where it sits changes.
+     ---------------------------------------------------------------------- */
+  function setPassive(id, on) {
+    var n = node(id); if (!n) return;
+    n.passive = !!on;
+    n.el.classList.toggle('passive', n.passive);
+    n.applyPointer();
+  }
+
+  /* A Button is a control only while something is actually listening to it: an
+     inspector-wired persistent call, or a runtime addClickListener. Until then
+     it is scenery. Re-evaluated whenever either of those changes, so a level
+     that wires itself up on activation goes live at exactly that moment. */
+  function refreshButtonPassive(n) {
+    if (!n || !n.button || n.pointerOwned) return;
+    var wired = n.button.listeners.length > 0 ||
+      n.button.onClick.some(function (c) { return c.state !== 0; });
+    setPassive(n.id, !wired);
+  }
+
+  /* A script that drives a node's pointer input itself — DraggableItem binds
+     its own pointerdown for the drag — takes ownership, so the rule above
+     leaves it alone. Its Button is empty, but the node is very much live. */
+  function ownPointer(id) {
+    var n = node(id); if (!n) return;
+    n.pointerOwned = true;
+    setPassive(id, false);
+  }
+
   /* Unity greys a non-interactable Button through the ColorTint transition,
      which this port does not implement, so callers dim buttons through their
      CanvasGroup instead. Most buttons in the scenes carry one; the tutorial's
@@ -681,10 +728,12 @@ var Engine = (function () {
   function addClickListener(id, fn) {
     var n = node(id); if (!n || !n.button) return;
     n.button.listeners.push(fn);
+    refreshButtonPassive(n);          // it has work to do now, so it is a control
   }
   function removeAllClickListeners(id) {
     var n = node(id); if (!n || !n.button) return;
     n.button.listeners.length = 0;
+    refreshButtonPassive(n);
   }
 
   function wireButtons() {
@@ -706,14 +755,44 @@ var Engine = (function () {
       n._wired = true;
       n.el.classList.add('btn');
       if (!n.button.interactable) n.el.classList.add('nointeract');
+      /* A Button the size of the screen is a backdrop, not a control. The start
+         screen is one: `Intro` is anchored 0,0 -> 1,1, so the whole 1920x1080
+         picture is a Button whose only job is Play() on the title voice-over.
+         Hover feedback on it would zoom and brighten the entire screen whenever
+         the mouse was anywhere at all, and the press tint dimmed the whole
+         picture on every tap. It stays clickable — it just stops pretending to
+         be a button. Measured, not listed: the largest real control in either
+         scene is Let's Go at 8.5% of the canvas, so 50% cannot catch one. */
+      var bs = n.size();
+      n.backdrop = !!(canvasSize[0] && canvasSize[1] &&
+        (bs[0] * bs[1]) / (canvasSize[0] * canvasSize[1]) >= 0.5);
+      if (n.backdrop) n.el.classList.add('backdrop');
+
+      /* The press tint is for controls only, and the test is made here rather
+         than left to the stylesheet: scenery, the screen-sized backdrop and the
+         item (which is dragged, not pressed) never take the class at all, so no
+         later rule can find a `pressed` sitting on something that never
+         reported a press. Same four exclusions as the hover rule. */
+      function canPress() {
+        return !n.passive && !n.backdrop && !n.pointerOwned && n.button.interactable;
+      }
+      var unpress = function () { n.el.classList.remove('pressed'); };
       n.el.addEventListener('pointerdown', function (e) {
-        if (!n.button.interactable) return;
+        if (!canPress()) return;
         n.el.classList.add('pressed');
       });
-      n.el.addEventListener('pointerup', function () { n.el.classList.remove('pressed'); });
-      n.el.addEventListener('pointerleave', function () { n.el.classList.remove('pressed'); });
+      n.el.addEventListener('pointerup', unpress);
+      n.el.addEventListener('pointerleave', unpress);
+      /* A touch that the browser takes away — a system gesture, a stylus
+         switching devices — fires pointercancel and nothing else. Without this
+         the button kept `pressed` for good and sat there dimmed and shrunk. */
+      n.el.addEventListener('pointercancel', unpress);
+      /* Nothing is listening yet, so it starts as scenery. The moment a
+         persistent call or an addClickListener gives it work it becomes a
+         control — see refreshButtonPassive. */
+      refreshButtonPassive(n);
       n.el.addEventListener('click', function (e) {
-        if (!n.button.interactable || !activeInHierarchy(n.id)) return;
+        if (n.passive || !n.button.interactable || !activeInHierarchy(n.id)) return;
         e.stopPropagation();
         // Unity persistent (inspector-wired) calls run first
         n.button.onClick.forEach(function (c) {
@@ -1497,6 +1576,8 @@ var Engine = (function () {
     setSizeDelta: setSizeDelta,
     setScale: setScale, getScale: getScale, setRotZ: setRotZ,
     setInteractable: setInteractable, isInteractable: isInteractable,
+    setPassive: setPassive, ownPointer: ownPointer,
+    isPassive: function (id) { var n = node(id); return !!(n && n.passive); },
     setCanvasGroupAlpha: setCanvasGroupAlpha, setBlocksRaycasts: setBlocksRaycasts,
     setParent: setParent, setAsLastSibling: setAsLastSibling, setAsFirstSibling: setAsFirstSibling,
     addClickListener: addClickListener, removeAllClickListeners: removeAllClickListeners,

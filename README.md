@@ -129,14 +129,18 @@ continuous value driven by the block count and rendered by sampling the very
 same `Scale_LeftDown` / `Scale_RightDown` curves at a *fraction* of their
 timeline, so every block visibly moves the balance closer to level:
 
-| blocks (of 4) | tilt | left pan | right pan | needle |
+| blocks (of 4) | balanceValue | left pan | right pan | needle |
 |---|---|---|---|---|
-| 0 | 1.00 | −34 | 79 | 20° |
-| 1 | 0.75 | −25.9 | 69.5 | 16.9° |
-| 2 | 0.50 | −8.0 | 48.5 | 10.0° |
-| 3 | 0.25 | 9.8 | 27.6 | 3.1° |
-| 4 | 0.00 | 18 | 18 | 0° |
-| 5 | −0.25 | 27.9 | 10.9 | −3.1° |
+| 0 | 1.00 | −34.0 | 79.0 | 20° |
+| 1 | 0.75 | −28.8 | 72.9 | 18° |
+| 2 | 0.50 | −23.6 | 66.8 | 16° |
+| 3 | 0.25 | −18.4 | 60.7 | 14° |
+| 4 | 0.00 | 18.0 | 18.0 | 0° |
+| 5 | −0.25 | 62.8 | −14.2 | −14° |
+
+*(Which pose a block count maps to was changed again in the fourth review, so
+that one block out is unmistakable rather than 1–3° from level — see “Being one
+block out now looks wrong” below. The table above is the current mapping.)*
 
 Removing blocks reverses it just as smoothly. No fidelity is lost in the poses:
 sampling `Scale_LeftDown` at fraction *f* produces exactly the pose
@@ -225,7 +229,272 @@ Headless Chromium 141:
 one. If you want telemetry, the natural call sites are `checkResult` in
 `WeightMeasuringGame` and the level-activation path in `main.js`.
 
-## Fixed in this revision (third review)
+## Fixed in this revision (fourth review)
+
+**1. Artwork that answered a tap.** The bar says *"Tap the + button to add
+blocks!"* and then the block beside the buttons responds to a click — pointer
+cursor, press flash — while doing nothing whatsoever. The block is not the
+problem. Unity attaches a `Button` to a great deal of scenery in these two
+scenes, and this port was handing every one of them the full control treatment.
+
+Counted across both scenes there are **162 Buttons, and 34 of them do anything**:
+
+| | |
+|---|---|
+| real controls (+, −, Check, Next, Try Again, Let's Go, the intro) | 34 |
+| the draggable item — never clicked, but it owns its own drag | 6 |
+| alpha-0 slot markers parented inside the two pans | 88 |
+| the `Start Items` copies of the item, the sample block and the + / − | 24 |
+| the sample block beside the + / − — 6 levels **and** the tutorial | 7 |
+| the tutorial's book, the tutorial's `−`, level 6's unused Next | 3 |
+
+The rule is now stated once, in `Engine`: **a `Button` is a control only while
+something is listening to it** — an inspector-wired persistent call, or a
+runtime `addClickListener`. Anything else is `setPassive`, which drops the node
+out of hit testing altogether, so a tap falls straight through to the artwork
+behind it: no cursor, no press flash, no click. Nothing moves and nothing
+changes size. It is re-evaluated whenever either of those changes, so a level
+that wires itself up on activation goes live at exactly that moment, and a level
+that has not been reached yet is inert rather than half-armed.
+
+Three things sit outside that rule and are named explicitly:
+
+- **The draggable item** binds its own `pointerdown`, so `DraggableItem` claims
+  the node with `Engine.ownPointer` and the rule leaves it alone. Once the item
+  is resting in a pan it is spent — the round is played out on the + and the −
+  from there — so it becomes passive then, instead of sitting in the bowl
+  flashing under every tap.
+- **Spawned blocks.** The `cube` and `Glass_ball` prefabs carry an empty
+  `Button` and the `Ball` prefab carries none, so every block the child adds was
+  clickable in four levels and inert in two. Both are made scenery the same way.
+- **The tutorial's `−`.** It has no listener in the original and none here — the
+  demo is *add three blocks*, and nothing ever asks for one back. It used to
+  light up the moment the first block landed, so from then on it looked exactly
+  as tappable as the `+` and did nothing at all. It now stays greyed for the
+  whole demo. The six levels are untouched: there the `−` really does remove a
+  block and `updatePlusMinusState` lights it exactly when it can.
+
+God Mode is unaffected — cursor edit outranks the inline `pointer-events` with
+an `!important` rule, so scenery can still be picked off the screen, and the
+bounds overlay draws inert Buttons grey instead of pink.
+
+**2. The title voice-over has a button.** The start screen is authored as one
+full-screen `Button` whose only job is `Play()` on the Intro's own
+`AudioSource`. The title line was therefore reachable but invisible: nothing
+said it was there, and a child who missed it had no way to ask again. There is
+now a speaker button in the **top-left corner** — press to play, press again to
+stop, waves animate while it speaks, and a ring breathes around it until it has
+been used once. It drives that same `AudioSource`, so the authored `Stop()` on
+**Let's Go** still applies and two copies of the line can never overlap. It is a
+real `<button>`, so Enter, Space and assistive tech work; it lives in the
+stage's overlay layer, so it letterboxes and scales with the board; and it is
+taken down, with the clip, the moment Let's Go is pressed.
+
+**3. Buttons answer the mouse now.** Unity's `ColorTint` transition only fires
+on *press*, so hovering **Next** or **Try Again** did nothing at all: with a
+mouse there was no way to tell them from the artwork around them until you had
+already clicked. Every live control now lifts and brightens under the pointer
+(`scale 1.05`, `brightness 1.07`) and pushes back down on press (`scale 0.96`,
+`brightness 0.92`), over 0.13 s. That is all six levels' **Next**, **Try
+Again**, **Check**, **+** and **−**, plus the tutorial's, **Let's Go** and the
+new title-voice button — one rule, no per-button styling.
+
+Three things it deliberately does *not* do:
+
+- **It never writes `transform`.** `applyLayout()` owns that property on every
+  `.un` and rewrites it on any relayout, and Let's Go has a scale tween writing
+  to it every frame — a hover in `transform` would be wiped or would fight the
+  RectTransform. The independent `scale` property composes with `transform`
+  instead, about the same pivot, and degrades to brightness-only where it is
+  unsupported. The transition list omits `transform` for the same reason:
+  easing it would turn every relayout into a slide.
+- **It never fires on a touchscreen.** Hover is behind
+  `@media (hover: hover) and (pointer: fine)`, because on touch `:hover` sticks
+  after a tap and would leave the last button pressed looking permanently lit.
+  The press feedback is outside that query, so touch still gets its own.
+- **It never lights up something that cannot be used.** Four exclusions, each
+  measured rather than guessed: `.nointeract` (a button the game has switched
+  off — a greyed `+` at the block limit), `.passive` (scenery), `.backdrop`
+  and `.draggable`. The last two are the same bug living somewhere else, and
+  are worth spelling out:
+
+  **The start screen is a Button the size of the screen.** `Intro` is anchored
+  `0,0 → 1,1`, so the whole 1920×1080 picture is a control whose only job is
+  `Play()` on the title line. A hover rule applied to it would have zoomed and
+  brightened the *entire screen* whenever the mouse was anywhere on it — which
+  is always — and it was already dimming the whole picture on every tap, and
+  showing a pointer cursor over every pixel. `wireButton` now marks any Button
+  covering half the canvas or more as a backdrop: still clickable, no cursor, no
+  feedback. It is a measurement, not a list — the largest real control in either
+  scene is Let's Go at **8.5%** of the canvas, so the 50% threshold cannot
+  catch one.
+
+  **The draggable item carries a Button too, and its `interactable` flag is
+  inconsistent in the source data** — `0` in levels 1 and 2, `1` in levels 3 to
+  6. Leaving it to the button rule would have given four levels a hover pop and
+  press dim and the other two nothing at all. It is excluded and given its own
+  rule keyed on the engine's own drag state, so all six behave identically: a
+  gentler `scale 1.03` lift that says *pick me up*, and it holds still once the
+  drag begins, because in flight the item has to read at its true size for the
+  child to judge whether it fits the pan.
+
+Under `prefers-reduced-motion` the brightness stays and the movement goes. God
+Mode holds buttons and the item still while it is open, so a hover pop can never
+land in a measurement.
+
+**4. The cursor now tells the truth, and there is a test that says so.** The
+same 128 Buttons that were answering taps were also claiming a **hand cursor**,
+which is what made the balance arms, the pans and the whole start screen look
+directly clickable before the child had done anything. Resolving the cursor for
+every node in both scenes, across all six levels and the tutorial:
+
+| | wrongly showing a hand |
+|---|---|
+| before | **115 nodes** |
+| after | **0** |
+
+Almost all of it was the 88 alpha-0 slot markers parented inside the two pans —
+invisible, but sitting exactly over the plates and arms — plus the intro-row
+copies, and the build stamp inheriting `pointer` from the screen-sized backdrop
+Button behind it. Nothing new was needed to fix it: passivity and the backdrop
+rule already covered every case. What was added is the guarantee:
+
+- The board now **states** its baseline, `#stage { cursor: default }`, instead
+  of relying on the absence of a rule. `cursor` inherits, so a single stray
+  declaration higher up would otherwise put a hand over the entire game. It sits
+  on the stage rather than on `.un`, so a button that ever gains a child label
+  still passes its own cursor down to it.
+- God Mode has a **Cursors** check (`qa.cursors()`, and part of *Run all*). It
+  reads the cursor the browser actually resolved for every visible node and
+  fails on any hand that is not a Button with a listener or an item that can
+  still be picked up. It runs last in the suite, straight after the placement
+  test has dropped an item into a pan, so it also proves a spent item stops
+  advertising a drag.
+
+The one hand that stays is `grab` on the item while it is waiting to be placed
+— it is dragged, that is the whole mechanic, and `grab` is the cursor that says
+so. It is a different cursor from `pointer`, it appears only once the bar has
+asked for the item, and it is gone the moment the item is in a pan.
+
+**5. Being one block out now looks wrong.** With 7 blocks needed, 8 blocks and
+7 blocks were the same picture: **1.1° of needle** between them, out of a
+possible 20°.
+
+The cause is a curve, not a constant. Every curve in `Scale_LeftDown` /
+`Scale_RightDown` is two keys with zero tangents, so the authored pose at clip
+fraction *t* is exactly `smoothstep(t) = 3t² − 2t³` of the way from level to the
+extreme — and smoothstep is **flat at both ends**. Sampling it at the raw weight
+ratio put the one reading the child actually has to make in the flattest part of
+the curve: one block out of seven is a ratio of 0.143, which smoothstep
+collapses to 0.055.
+
+So the **pose** is chosen first now, and the clip time is derived from it by
+inverting the smoothstep (exact in closed form for a two-key zero-tangent
+curve). Any imbalance at all leans at least `TILT_MIN = 0.6` of full tilt:
+
+| blocks (of 7) | needle | left pan | right pan | | needle **before** |
+|---|---|---|---|---|---|
+| 0 | 20.00° | −34.0 | 79.0 | | 20.00° |
+| 1 | 18.86° | −31.0 | 75.5 | | 18.89° |
+| 2 | 17.71° | −28.1 | 72.0 | | 16.03° |
+| 3 | 16.57° | −25.1 | 68.5 | | 12.13° |
+| 4 | 15.43° | −22.1 | 65.1 | | 7.87° |
+| 5 | 14.29° | −19.1 | 61.6 | | 3.97° |
+| 6 | 13.14° | −16.2 | 58.1 | | **1.11°** |
+| **7** | **0.00°** | **18.0** | **18.0** | | 0.00° |
+| 8 | −13.14° | 60.1 | −12.2 | | **−1.11°** |
+
+The comparison in the report — 8 balls against 7 — goes from **1.1° to 13.1°**,
+a **12×** difference, and the last block now swings the pan 34 units instead of
+3. One block out lands at **14.0°** (levels 1–2), **13.3°** (levels 4–5),
+**13.1°** (levels 3, 6) and **14.7°** (tutorial), against the 12°–15° asked for.
+Too many blocks leans the other way by the same amount, so *too few* and *too
+many* are opposite pictures rather than two shades of almost-level.
+
+Three properties are kept:
+
+- **Every block still moves the balance**, which is what an earlier review
+  asked for. It moves it by an *equal* step now — 1.1° a block at N=7 — where
+  before the steps ran 1.1 · 2.9 · 3.9 · 4.3 · 3.9 · 2.9 · 1.1 and spent all
+  their travel in the middle of the count, where nothing is being decided.
+- **The authored poses are untouched.** Pose 0 is exactly level (18/18, needle
+  0°) and pose 1 is exactly the authored extreme (−34/79, needle 20°, beam 8°).
+  Only which pose a given block count maps to has changed.
+- **The tween interpolates the pose, not the ratio.** `tiltPose` has a
+  deliberate step at balance, and easing the ratio through it would hold the
+  beam tilted for the whole tween and snap it flat on the last frame. Easing the
+  pose lets the final block carry the beam all the way down.
+
+The tutorial uses the same mapping, where it matters just as much: counting to
+three, the moment the balance actually balanced used to be the *least* visible
+of the three steps (5.2°, against 5.2° and 9.6° for the two before it). It is
+now 14.7°, against 2.7° each.
+
+**6. The press highlight is decided in one place, and tested by pressing.** The
+block's tap flash was the `ColorTint` press tint arriving on a `Button` nothing
+listens to — the same root cause as **1**, and it goes away with it. Two things
+were tightened on top:
+
+- **Scenery never takes the class at all now.** The exclusions used to live only
+  in the stylesheet, so a `pressed` could sit on a node that had no business
+  reporting a press and wait for some future rule to render it. `wireButton`
+  applies the same four tests the hover rule does — passive, backdrop,
+  pointer-owned, non-interactable — before the class is added. Audited across
+  both scenes: **33 nodes can take a press highlight and all 33 are real
+  controls**; nothing else can, in any state.
+- **A cancelled touch no longer sticks.** `pressed` was removed on `pointerup`
+  and `pointerleave` but not on `pointercancel`, which is what a system gesture
+  or a stylus switching devices fires *instead* of either. A button caught by
+  one kept the class for good and sat there dimmed and shrunk. Latent rather
+  than reported, and in exactly this family, so it is fixed here.
+
+God Mode gains a **Press** check (also in *Run all*) that drives the report's own
+repro: it finds the sample block, asserts it takes no pointer events, asserts a
+tap at its centre lands on the counter behind it, then dispatches a real
+`pointerdown` there and asserts the block's computed `filter`, `scale` and
+`opacity` are byte-identical before, during and after — and that no node
+anywhere is left holding a press state.
+
+**7. A + or − now looks usable exactly when it is.** A level opens on *"Place
+the orange on the balance"*, and until that is done neither button can do
+anything — but both sat there in full blue. The cause was a method whose whole
+job was to decouple the two: `setPlusMinusInteractableOnly` switched the buttons
+off while explicitly forcing their alpha back to 1. It is gone, and its two call
+sites ask for a genuinely disabled button instead. Level start dims them too;
+before, `start()` set `interactable = false` and never touched the alpha at all.
+
+The same defect was hiding in **Try Again after too few blocks**: that path
+called `enablePlusMinus()`, which lights *both*, having just emptied the pan —
+so `−` came back in full blue with nothing to remove and `removeCube()`
+returning on the spot. It now goes through `updatePlusMinusState()`, which
+judges each button on its own merits.
+
+| | + | − |
+|---|---|---|
+| level opens, *"Place the orange…"* | dim | dim |
+| item dropped, instruction 3 reading | dim | dim |
+| instruction 3 finishes | **blue** | dim |
+| first block added | **blue** | **blue** |
+| block limit reached | dim | **blue** |
+| Check pressed | dim | dim |
+| Try Again, too few | **blue** | dim *(was blue)* |
+
+Dimming alone was not enough to read as *off*: the authored `disabledAlpha`
+turns a blue button into a **paler blue**, which at a glance is still the live
+control it is drawn as. Draining the colour is what makes it read as grey, so a
+disabled control also takes `grayscale(0.9)` — on the sprite layer, so it cannot
+collide with the brightness the node itself uses for hover and press, and behind
+the same exclusions those two use plus `.is-glowing`, so a highlighted button
+never loses its rim. Audited: **15 nodes can take the disabled look and all 15
+are real controls.** The four that are correctly spared are the draggable items
+in levels 1 and 2 (whose `Button` is authored non-interactable — greying them
+would grey the boat and the orange), and the tutorial's book, which is scenery
+the clip carries into the pan.
+
+Switching on fades rather than cutting, so the moment the child earns the button
+reads as it coming to life.
+
+## Fixed in the third review
 
 Full verified results in [`QA_CHECKLIST.md`](QA_CHECKLIST.md).
 

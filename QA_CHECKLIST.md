@@ -78,7 +78,7 @@ Viewports: 1280×720 · 1366×768 · 1920×1080 · 1024×768 · 1440×900 · 160
 
 ## 6 · Balance movement
 
-* [x] **The tutorial moves per block, smoothly.** — *tilt 1 → 0.667 → 0.333 → 0; item pan −34 → −20.5 → 4.5 → 18; block pan 79 → 63.2 → 33.8 → 18; needle 20° → 14.8° → 5.2° → 0°*
+* [x] **The tutorial moves per block, smoothly.** — *tilt 1 → 0.667 → 0.333 → 0; item pan −34 → −20.5 → 4.5 → 18; block pan 79 → 63.2 → 33.8 → 18; needle 20° → 14.8° → 5.2° → 0°* — **numbers superseded in the fourth review**: the pose a block count maps to was changed so that being one block out is unmistakable. Now needle 20° → 17.3° → 14.7° → 0°, item pan −34 → −27.1 → −20.1 → 18. The behaviour this box records — per block, smooth, ends exactly level — is unchanged; see section 16.
 * [x] It never jumps. — *0.5 s eased tween per block; the pan rises monotonically*
 * [x] It finishes exactly level. — *both pans 18/18, needle 0°*
 * [x] Same renderer as the six levels. — *one sampled authored curve; the tutorial no longer waits for the last block to swing everything at once*
@@ -297,6 +297,147 @@ picking nodes to check.
 * [x] God Mode is excluded from the learner build, tags and all. — *no `god-mode` string survives; the build fails if one does*
 * [x] The built bundle boots clean. — *no God Mode globals, no build stamp, 0 errors, 0 failed requests*
 * [x] Vercel configured. — *`vercel.json`: build command, output directory, immutable asset caching, `no-cache` on `index.html`*
+
+## 16 · Inert artwork and the title-voice button — **not yet re-run**
+
+Added in the fourth review. These boxes are deliberately unticked: the change
+was made and read through, but the browser suites above have **not** been
+re-executed against it. Tick them from a real run, not from this list.
+
+Static audit of `js/data.js` (this part *was* executed — the counts below come
+from walking both scene trees against the set of ids that receive a persistent
+call or an `addClickListener`):
+
+| | |
+|---|---|
+| `Button` components in the two scenes | 162 |
+| of those, ones that actually do something | 34 |
+| the draggable item — no click, but owns its own drag | 6 |
+| pure scenery, now `Engine.setPassive` | 122 |
+
+* [ ] The sample block beside the + / − ignores taps in all six levels **and**
+  the tutorial — no cursor change, no press flash, no click.
+* [ ] The + and the − are still the only way to change the count.
+* [ ] Blocks already in a pan ignore taps, in all six levels and the tutorial.
+* [ ] The `Start Items` copies of the item, the block and the + / − ignore taps
+  during instruction 1.
+* [ ] The alpha-0 slot markers inside both pans ignore taps.
+* [ ] **Dragging still works** — the item is the one empty `Button` that must
+  stay a pointer target, and it is claimed with `Engine.ownPointer`. Mouse and
+  touch, all six levels.
+* [ ] An item resting in a pan ignores taps, and God Mode's *Return item* makes
+  it draggable again.
+* [ ] +, −, Check, Next, Try Again and Let's Go all still respond, in every
+  level, including levels reached later — they arm on activation, not at load.
+* [ ] The tutorial's `−` stays greyed for the whole demo and never flashes.
+* [ ] God Mode: cursor edit still picks scenery; bounds draws it grey.
+* [ ] Title-voice button: top-left of the start screen, plays and stops the
+  title line, waves animate while speaking, invitation ring stops after first
+  use, keyboard reachable, gone the moment Let's Go is pressed.
+* [ ] The title line never plays over the tutorial, and never doubles with the
+  full-screen tap that also plays it.
+
+Button hover / press feedback:
+
+* [ ] **Next** and **Try Again** lift and brighten under the mouse, in all six
+  levels, and push down on press.
+* [ ] So do **Check**, **+**, **−**, the tutorial's own buttons, **Let's Go**
+  and the title-voice button.
+* [ ] A greyed `+` or `−` does **not** react — nor does any scenery.
+* [ ] **The start screen does not zoom or dim.** — *`Intro` is a Button anchored
+  `0,0 → 1,1`, i.e. the whole 1920×1080 picture; it is marked `.backdrop` and
+  excluded. Largest real control is Let's Go at 8.5% of the canvas, so the 50%
+  threshold cannot catch one. It still plays the title line when clicked.*
+* [ ] **The item behaves the same in all six levels** — *its serialized
+  `interactable` is 0 in L1–L2 and 1 in L3–L6, so the button rule alone would
+  have given four levels feedback and two none. It has its own rule off drag
+  state: lifts on hover, holds still while actually being dragged.*
+* [ ] Nothing moves when the board is relayed out or resized. — *the effect is
+  on the independent `scale` property; `transform` stays the engine's alone*
+* [ ] Let's Go keeps its breathing tween and pops on hover as well.
+* [ ] On a touchscreen no button is left looking lit after a tap. — *hover is
+  behind `@media (hover: hover) and (pointer: fine)`*
+* [ ] Under `prefers-reduced-motion` the brightness remains and the movement
+  stops.
+* [ ] God Mode: buttons hold still under the cursor, so layout readings are
+  unaffected.
+
+Cursor affordance — resolved for every node in both scenes, all six levels and
+the tutorial. **115 nodes wrongly showed a hand before; 0 do now.** The bulk was
+the 88 alpha-0 slot markers sitting over the pans and arms, plus the intro-row
+copies and the build stamp inheriting `pointer` from the screen-sized backdrop.
+
+* [ ] Balance arms, plates, pivot and base show the default arrow, before any
+  weight is placed and after.
+* [ ] The start screen shows the default arrow everywhere except the Let's Go
+  button and the title-voice button.
+* [ ] The sample block, the blocks in the pans and the intro-row copies show
+  the default arrow.
+* [ ] The item shows `grab` **only** while it is waiting to be placed — never
+  before the bar asks for it, never once it is in a pan.
+* [ ] A greyed `+` / `−` shows the default arrow; an enabled one shows a
+  pointer.
+* [ ] God Mode → **Cursors** passes on the tutorial and on all six levels, and
+  inside **Run all** (where it runs after a real drop).
+
+Balance tilt readability. The pose values below are **computed, not measured** —
+the authored curves are two keys with zero tangents, so the pose is exactly
+`smoothstep` and the numbers are closed-form. The browser evaluates the same
+Hermite, so a run should reproduce them; it has not been run.
+
+| | one block out | balanced |
+|---|---|---|
+| before | 1.11° (N=7), 1.48° (N=6), 3.13° (N=4) | 0° |
+| after | 13.14° / 13.33° / 14.00° | 0° |
+
+* [ ] **8 balls vs 7 balls is obvious.** — *13.1° against 0°, was 1.1°*
+* [ ] Too many and too few lean in **opposite** directions, by the same angle.
+* [ ] Every block still moves the balance, in all six levels and the tutorial.
+  — *equal 1.1° steps at N=7, 2.0° at N=4, 2.7° in the tutorial*
+* [ ] The pans reach exactly 18 / 18 with the needle and beam at 0° when
+  correct — the authored level pose, unchanged.
+* [ ] Full tilt is still the authored extreme. — *−34 / 79, needle 20°, beam 8°*
+* [ ] The last block sweeps the beam smoothly down to level, with no hold-then-
+  snap on the final frame. — *the tween interpolates the pose, not the ratio*
+* [ ] Try Again after too many blocks leaves the scale clearly leaning the
+  wrong way, and removing one block levels it.
+* [ ] God Mode → **Scale** still passes (endpoints and monotonicity unchanged).
+
+Press / highlight. Static audit (executed): **33 nodes can take a press
+highlight across both scenes, and all 33 are real controls** — no scenery can,
+in any state.
+
+* [ ] Tapping the sample block produces **no** flash, tint or highlight — all
+  six levels and the tutorial.
+* [ ] Same for blocks already in a pan, the intro-row copies, the balance arms
+  and plates, and an item resting in a pan.
+* [ ] Tapping the start-screen background does not dim the picture. — *it still
+  plays the title line; only the whole-screen tint is gone*
+* [ ] +, −, Check, Next, Try Again and Let's Go all still dip on press.
+* [ ] A press interrupted by a system gesture does not leave a button stuck
+  dimmed. — *`pointercancel` clears it; previously only `pointerup` and
+  `pointerleave` did*
+* [ ] God Mode → **Press** passes on all six levels, and inside **Run all**.
+
+Disabled state on the + and −. Static audit (executed): **15 nodes can take the
+disabled look and all 15 are real controls**; the 4 correctly spared are the
+levels 1–2 draggable items (authored non-interactable) and the tutorial's book.
+
+* [ ] Both buttons are **dim and grey** while the bar says *"Place the &lt;item&gt;
+  on the balance"* — all six levels.
+* [ ] They stay that way while instruction 3 is being read, then `+` fades up
+  to blue as the line ends.
+* [ ] `−` stays dim until there is a block to remove, then lights.
+* [ ] `+` dims at the block limit; both dim on Check.
+* [ ] **Try Again after too few blocks leaves `−` dim**, not blue. — *the pan
+  has just been emptied, so there is nothing to remove*
+* [ ] Try Again after too many leaves both live (blocks are still in the pan).
+* [ ] The boat and the orange are **not** greyed. — *their `Button` is authored
+  non-interactable in levels 1–2; the exclusion is what keeps the artwork
+  full-colour*
+* [ ] The tutorial's book is not greyed when the clip carries it into the pan.
+* [ ] The tutorial's `+` and `−` look alike when both are disabled.
+* [ ] Enabling fades rather than snapping.
 
 ---
 

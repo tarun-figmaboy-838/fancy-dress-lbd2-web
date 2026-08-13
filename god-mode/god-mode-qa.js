@@ -216,6 +216,150 @@
     return this.lines;
   };
 
+  // ------------------------------------------------------------ cursor test --
+  /* Reads the cursor the browser has actually resolved for every node on
+     screen, rather than reasoning about the stylesheet. A hand over anything
+     that is not a live control is the defect this guards: 88 alpha-0 slot
+     markers inside the two pans, the intro-row copies and a screen-sized
+     backdrop Button all used to claim one, so the balance arms, the plates and
+     the whole start screen invited a click that did nothing.
+
+     Interactive means exactly two things here: a Button something is listening
+     to (pointer), and the draggable item while it can still be picked up
+     (grab/grabbing). Anything else must read as default. */
+  P.cursors = function () {
+    this.clear();
+    this.head('— cursor affordance test —');
+    var root = activeLevel();
+    if (!root) { this.warn('no scene root active'); return this.lines; }
+
+    var HAND = { pointer: 1, grab: 1, grabbing: 1 };
+    var checked = 0, wrong = [], controls = 0, items = 0;
+
+    (function walk(n) {
+      if (!n.active) return;
+      var el = n.el;
+      if (el && U.isVisible(el)) {
+        var cs = getComputedStyle(el);
+        // an element out of hit testing cannot show its cursor to anyone
+        if (cs.pointerEvents !== 'none') {
+          checked++;
+          if (HAND[cs.cursor]) {
+            var live = !!(n.button && !n.passive &&
+                          (n.button.listeners.length > 0 ||
+                           n.button.onClick.some(function (c) { return c.state !== 0; })));
+            var drag = el.classList.contains('draggable') &&
+                       !el.classList.contains('nodrag') && !n.passive;
+            if (live) controls++;
+            else if (drag) items++;
+            else wrong.push(n.name + ' #' + n.id + ' -> ' + cs.cursor);
+          }
+        }
+      }
+      (n.children || []).forEach(walk);
+    })(root);
+
+    this.check(!wrong.length, 'nothing but a live control shows a hand cursor',
+      wrong.length ? wrong.slice(0, 6).join('; ') + (wrong.length > 6 ? '  (+' + (wrong.length - 6) + ' more)' : '')
+                   : checked + ' hit-testable nodes checked');
+    this.check(controls > 0 || items > 0, 'something on screen still reads as interactive',
+      controls + ' control(s), ' + items + ' draggable item(s)');
+
+    /* The screen-sized Button on the start screen is the one that used to make
+       every pixel of it look clickable, the build stamp included. */
+    var backs = U.qsa('.un.btn.backdrop');
+    backs.forEach(function (b) {
+      this.check(getComputedStyle(b).cursor === 'default',
+        'backdrop Button ' + b.dataset.name + ' does not claim a cursor');
+    }, this);
+    if (!backs.length) this.out('info', 'no backdrop Button on this screen');
+    return this.lines;
+  };
+
+  // ------------------------------------------------------------- press test --
+  /* The reported repro, driven for real: tap the sample block beside the +/−
+     and assert that absolutely nothing about it changes. This is a behavioural
+     check rather than a reading of the stylesheet — it dispatches at the block's
+     own screen position, on whatever element the browser says is actually on top
+     there, so it proves the routing as well as the styling. */
+  function pressableAt(cx, cy) {
+    var el = document.elementFromPoint(cx, cy);
+    if (el && el.closest && el.closest('#godPanel, #godSelBox, #godBadge, #godToast')) return null;
+    return el;
+  }
+
+  function firePointer(el, type, cx, cy) {
+    var ev;
+    try {
+      ev = new PointerEvent(type, { bubbles: true, cancelable: true, clientX: cx, clientY: cy, pointerId: 991 });
+    } catch (e) {
+      ev = new MouseEvent(type, { bubbles: true, cancelable: true, clientX: cx, clientY: cy });
+    }
+    el.dispatchEvent(ev);
+  }
+
+  P.press = function () {
+    this.clear();
+    this.head('— press / highlight test —');
+    var root = activeLevel();
+    if (!root) { this.warn('no scene root active'); return this.lines; }
+
+    // every piece of scenery must be out of hit testing, not merely unstyled
+    var stuck = U.qsa('.un.pressed');
+    this.check(!stuck.length, 'nothing is left holding a press state',
+      stuck.map(function (e) { return e.dataset.name; }).join(', '));
+
+    var leaks = [];
+    U.qsa('.un.passive').forEach(function (el) {
+      if (!U.isVisible(el)) return;
+      if (getComputedStyle(el).pointerEvents !== 'none') leaks.push(el.dataset.name);
+    });
+    this.check(!leaks.length, 'all scenery is out of hit testing',
+      leaks.length ? leaks.slice(0, 6).join(', ') : U.qsa('.un.passive').length + ' passive node(s)');
+
+    // the block beside the +/- buttons — the node the report names
+    var all = window.Controllers ? Controllers.all('DraggableItem') : {};
+    var cube = null;
+    Object.keys(all).forEach(function (k) {
+      var d = all[k];
+      if (d.isCube && d.gameManagerId === root.id) cube = d;
+    });
+    if (!cube) { this.warn('no sample block on this screen (tutorial uses a plain node)'); return this.lines; }
+
+    var n = Engine.node(cube.node);
+    var r = n.el.getBoundingClientRect();
+    var cx = r.left + r.width / 2, cy = r.top + r.height / 2;
+
+    this.check(getComputedStyle(n.el).pointerEvents === 'none',
+      'the sample block does not receive pointer events');
+
+    var top = pressableAt(cx, cy);
+    if (!top) { this.warn('the block is covered by the panel — move it and re-run'); return this.lines; }
+    var inCube = false, p = top;
+    while (p) { if (p === n.el) { inCube = true; break; } p = p.parentElement; }
+    this.check(!inCube, 'a tap on the block lands on the counter behind it, not the block',
+      'hit ' + (top.dataset && top.dataset.name ? top.dataset.name : top.className));
+
+    var before = getComputedStyle(n.el);
+    var was = { filter: before.filter, scale: before.scale, opacity: before.opacity };
+
+    firePointer(top, 'pointerdown', cx, cy);
+    var mid = getComputedStyle(n.el);
+    var pressedNow = U.qsa('.un.pressed');
+    this.check(!pressedNow.length, 'pressing the block sets no press state anywhere',
+      pressedNow.map(function (e) { return e.dataset.name; }).join(', '));
+    this.check(mid.filter === was.filter && mid.scale === was.scale && mid.opacity === was.opacity,
+      'the block does not change appearance when pressed',
+      'filter ' + was.filter + ' -> ' + mid.filter + ', scale ' + was.scale + ' -> ' + mid.scale);
+
+    firePointer(top, 'pointerup', cx, cy);
+    var after = getComputedStyle(n.el);
+    this.check(after.filter === was.filter && after.scale === was.scale,
+      'and nothing is left behind after the release');
+    this.check(!U.qsa('.un.pressed').length, 'no press state survives the release');
+    return this.lines;
+  };
+
   // ------------------------------------------------------------ layout test --
   P.layout = function () {
     this.clear();
@@ -263,7 +407,13 @@
         var s4 = self.lines.slice();
         self.layout();
         var s5 = self.lines.slice();
-        self.lines = s1.concat(s2, s3, s4, s5);
+        /* Last, deliberately: placement has just dropped the item into a pan,
+           so this also proves a spent item stops advertising a drag. */
+        self.cursors();
+        var s6 = self.lines.slice();
+        self.press();
+        var s7 = self.lines.slice();
+        self.lines = s1.concat(s2, s3, s4, s5, s6, s7);
         self.renderAll();
         return self.lines;
       });

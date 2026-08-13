@@ -127,6 +127,7 @@ body.godMode #godPanel { display: flex; }
 .godQa-pass { color: #6ff0b8; }
 .godQa-fail { color: #ff8a8a; }
 .godQa-warn { color: #ffd479; }
+.godQa-info { color: var(--godMuted); }
 .godQa-head { color: var(--godAccent2); font-weight: 700; margin-top: 4px; }
 
 /* -------------------------------------------------------------- selection -- */
@@ -159,9 +160,28 @@ body.godCursorEdit #godSelBox .godHandle { pointer-events: auto; }
 
 body.godCursorEdit #game { cursor: crosshair; }
 
+/* The layout tools read real DOM boxes, so a 5% hover pop under the cursor
+   would land in a measurement. Buttons and the item hold still while God Mode
+   is open. !important rather than out-specifying the learner rule: that rule
+   carries a chain of :not()s and would silently outrank this one again the
+   next time an exclusion is added to it. */
+body.godMode .un.btn:hover,
+body.godMode .un.draggable:hover { scale: none !important; }
+
+/* Scenery (Engine.setPassive) is removed from hit testing in the learner
+   build, which would also put it out of reach of the click-to-pick tool. An
+   !important author rule outranks the engine's inline pointer-events, so
+   cursor edit can still pick a sample block or a slot marker off the screen.
+   Only while cursor edit is on, and only while God Mode is loaded at all. */
+body.godCursorEdit .un.passive,
+body.godCursorEdit .un.passive > .hit { pointer-events: auto !important; }
+
 /* ------------------------------------------------------------ visual debug -- */
 body.godShowBounds .un { outline: 1px solid rgba(60,245,196,.35); }
 body.godShowBounds .un.btn { outline-color: rgba(255,111,216,.6); }
+/* a Button that is scenery (Engine.setPassive): grey, so a design review can
+   tell at a glance which artwork answers a tap and which is just a picture */
+body.godShowBounds .un.btn.passive { outline-color: rgba(150,162,180,.5); }
 body.godShowBounds .un.tmp { outline-color: rgba(255,212,121,.6); }
 
 body.godShowSafe #stage::after {

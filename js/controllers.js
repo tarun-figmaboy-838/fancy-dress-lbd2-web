@@ -569,6 +569,99 @@ var Controllers = (function () {
     return { register: register, reset: reset, poke: poke, prompt: prompt };
   })();
 
+  /* =========================================================================
+     IntroVoice — a control for the title line on the start screen
+     -------------------------------------------------------------------------
+     The start screen is authored as one full-screen Button whose only job is
+     `Play()` on the Intro's own AudioSource. So the title line was reachable
+     but invisible: nothing on screen said it was there, and a child who missed
+     it the first time had no way to ask for it again. This puts a real button
+     in the top-left corner.
+
+     It drives that same AudioSource rather than a clip of its own, so the
+     authored `Stop()` on Let's Go still applies to it and two copies of the
+     line can never overlap.
+
+     It lives in the stage's overlay layer, so it letterboxes and scales with
+     the board and the numbers in the stylesheet are plain 1920x1080 design px.
+     ======================================================================= */
+  var IntroVoice = (function () {
+    var ICON =
+      '<svg viewBox="0 0 48 48" aria-hidden="true" focusable="false">' +
+      '<path class="vo-horn" d="M6 19h8l11-9v28l-11-9H6z"/>' +
+      '<path class="vo-wave vo-wave1" d="M30 18a9 9 0 0 1 0 12"/>' +
+      '<path class="vo-wave vo-wave2" d="M35.5 13a16 16 0 0 1 0 22"/>' +
+      '</svg>';
+
+    var el = null, srcId = null, ticker = null, acc = 0;
+
+    function source() { return srcId ? E.Audio.source(srcId) : null; }
+
+    function paint() {
+      if (!el) return;
+      var s = source();
+      el.classList.toggle('is-playing', !!(s && s.isPlaying()));
+    }
+
+    /* The line can end on its own, be stopped by Let's Go, or be refused by the
+       autoplay policy. Rather than trust any one of those, the button reads the
+       source a few times a second, so what it shows is always what is audible. */
+    function watch(dt) {
+      acc += dt;
+      if (acc < 0.15) return;
+      acc = 0;
+      paint();
+    }
+
+    function toggle() {
+      var s = source();
+      if (!s || !s.clip) return;
+      if (s.isPlaying()) s.stop(); else s.play();
+      if (el) el.classList.remove('is-inviting');   // it has been found
+      paint();
+    }
+
+    function mount(audioId) {
+      unmount();
+      srcId = audioId ? String(audioId) : null;
+      var s = source();
+      if (!s || !s.clip) { srcId = null; return false; }   // nothing to play
+      var layer = E.overlay();
+      if (!layer) { srcId = null; return false; }
+
+      // a real <button>, so Enter, Space and assistive tech work for free
+      el = document.createElement('button');
+      el.type = 'button';
+      el.className = 'intro-vo is-inviting';
+      el.setAttribute('aria-label', 'Play the introduction');
+      el.title = 'Play the introduction';
+      el.innerHTML = ICON;
+      el.addEventListener('click', function (ev) {
+        ev.preventDefault();
+        ev.stopPropagation();
+        toggle();
+      });
+      layer.appendChild(el);
+
+      acc = 0; ticker = watch; E.add(ticker);
+      paint();
+      return true;
+    }
+
+    function unmount() {
+      if (ticker) { E.remove(ticker); ticker = null; }
+      // the line belongs to the screen it introduces; it does not outlive it
+      var s = source();
+      if (s && s.isPlaying()) s.stop();
+      if (el && el.parentNode) el.parentNode.removeChild(el);
+      el = null;
+      srcId = null;
+    }
+
+    return { mount: mount, unmount: unmount, toggle: toggle,
+             visible: function () { return !!el; } };
+  })();
+
   /* Instantiate(prefab, parent) then rect.position = target.position.
      The hand is one preloaded still frame driven by a CSS transform loop; the
      old 69-image `tap_anim` flipbook is no longer played. */
@@ -605,6 +698,43 @@ var Controllers = (function () {
      out of a pan, and the only ones that decide how far the balance tilts.
      Everything visible is rendered from the owning game's `scaleState`.
      ======================================================================= */
+
+  /* ------------------------------------------------------------------------
+     How far the balance leans, for a given imbalance.
+
+     Every curve in `Scale_LeftDown` / `Scale_RightDown` is two keys with zero
+     tangents, so the authored pose at clip fraction t is exactly
+     smoothstep(t) = 3t² − 2t³ of the way from level to the extreme. Feeding the
+     raw weight ratio straight in — which is what `|balanceValue| * clipLength`
+     did — puts the child's most important reading in the flattest part of that
+     curve. With 7 blocks needed, one block out is a ratio of 1/7, and
+     smoothstep collapses that to 0.055: a needle 1.1° off level out of a
+     possible 20°. Right and one-out were the same picture.
+
+     So the POSE is chosen first and the clip time is derived from it, by
+     inverting the smoothstep. Two things follow:
+
+       · the rig moves by equal steps per block instead of crowding all of its
+         travel into the middle of the count, and
+       · any imbalance at all leans at least TILT_MIN of full tilt, so "not yet"
+         is unmistakable and level is the one state that reads as level.
+
+     One block out now lands at 13.1°–14.7° depending on the level, against the
+     12°–15° the report asked for, and the last block swings the beam through
+     all of it. The extremes are untouched: pose 0 is exactly level and pose 1
+     is exactly the authored extreme, so the poses themselves are as authored.
+     ---------------------------------------------------------------------- */
+  var TILT_MIN = 0.6;
+
+  /* signed balanceValue -> signed clip fraction (+1 = item pan fully down) */
+  function tiltPose(v) {
+    var r = Math.min(1, Math.abs(v));
+    if (r < 1e-6) return 0;
+    var u = TILT_MIN + (1 - TILT_MIN) * r;              // wanted pose fraction
+    // smoothstep⁻¹, exact for a two-key zero-tangent curve
+    var t = 0.5 - Math.sin(Math.asin(1 - 2 * Math.min(1, u)) / 3);
+    return (v < 0 ? -1 : 1) * Math.max(0, Math.min(1, t));
+  }
 
   function newScaleState() {
     return {
@@ -846,7 +976,12 @@ var Controllers = (function () {
       E.setScale(f.goButton, 1);
       self.loop = E.loopScale(f.goButton, 0.8, 1, 1, 'InOutSine');
       E.setActive(f.gameplayPanel, false);
+      /* The title line sits on the start screen's own AudioSource — the node
+         Let's Go is a child of. Give the child a control they can see for it. */
+      var go = E.node(f.goButton);
+      IntroVoice.mount(go && go.parent ? go.parent.id : null);
       E.addClickListener(f.goButton, function () {
+        IntroVoice.unmount();          // the start screen is over
         E.Audio.source(f.audioSource).playOneShot(f.buttonClickAudio);
         if (self.loop) self.loop.kill();
         E.setInteractable(f.goButton, false);
@@ -901,24 +1036,35 @@ var Controllers = (function () {
     var COUNTER_PATHS = ['items /Item 1', 'items /Item 1/cube'];
     self.tilt = 1;
 
-    function setTutorialTilt(v) {
-      self.tilt = v;
-      var clip = v >= 0 ? 'Scale_LeftDown' : 'Scale_RightDown';
+    /* Same pose mapping as the six levels — see tiltPose. The tutorial counts
+       to three, so before this the last block moved the needle 5.2° while the
+       two before it moved 5.2° and 9.6°: the moment the balance actually
+       balanced was the least visible step of the three. */
+    function applyTutorialPose(p) {
+      var clip = p >= 0 ? 'Scale_LeftDown' : 'Scale_RightDown';
       /* samplePose, not the animator: BallAnimation is playing its own
          visibility curves on the same rig at this moment, and going through the
          animator would stop its ticker every frame and inherit its filter. */
-      E.samplePose(f.bookAnimator, clip, Math.abs(v) * (E.clipLength(clip) || 0.75),
+      E.samplePose(f.bookAnimator, clip, Math.abs(p) * (E.clipLength(clip) || 0.75),
                    BALANCE_PATHS);
+    }
+
+    function setTutorialTilt(v) {
+      self.tilt = v;
+      applyTutorialPose(tiltPose(v));
     }
 
     function animateTutorialTilt(target, dur) {
       var from = self.tilt;
       if (Math.abs(target - from) < 0.0005) { setTutorialTilt(target); return; }
+      // pose-space interpolation, for the reason given in animateTiltTo
+      var p0 = tiltPose(from), p1 = tiltPose(target);
       var tok = tiltRunner.fresh('tilt');
       tiltRunner.run(function (t) {
         return E.tween(dur, 'Smooth', function (u) {
           if (!E.activeInHierarchy(self.node)) return;
-          setTutorialTilt(from + (target - from) * u);
+          self.tilt = from + (target - from) * u;
+          applyTutorialPose(p0 + (p1 - p0) * u);
         }, t);
       }, tok);
     }
@@ -1079,6 +1225,7 @@ var Controllers = (function () {
     function spawnAndMoveCube(index, tok) {
       var id = E.instantiate((f.cubePrefab || {}).template, f.basket);
       if (!id) return E.wait(0.3, tok);
+      E.setPassive(id, true);          // scenery, exactly as in the six levels
       self.spawned.push(id);
       var tp = (f.cubeTargetPositions || [])[index];
       sizeBlockForSlot(id, tp, null);
@@ -1105,6 +1252,12 @@ var Controllers = (function () {
 
     function setButtonEnabled(id, on) {
       if (!id || !E.node(id)) return;
+      /* A button the tutorial manages is a control, even the `−` that stays off
+         for the whole demo. Without this it would be classed as scenery — it has
+         no listener — and take the dim but not the drained colour, so the two
+         buttons would sit side by side disabled and not look alike. Harmless:
+         non-interactable already blocks the press, the click and the hover. */
+      E.setPassive(id, false);
       E.setInteractable(id, on);
       E.setCanvasGroupAlpha(id, on ? ENABLED_ALPHA : DISABLED_ALPHA);
     }
@@ -1127,7 +1280,13 @@ var Controllers = (function () {
       // the block landing rather than all at once at the end
       animateTutorialTilt(tutorialTiltTarget(), 0.5);
 
-      if (self.cubesPlaced === 1) setButtonEnabled(f.minusButton, true);
+      /* The tutorial's `-` stays greyed for the whole demo. It has no listener
+         in the original and none here — the demonstration is "add three
+         blocks", and nothing ever asks the child to take one away. It used to
+         be lit the moment the first block landed, so from then on it looked
+         every bit as tappable as the `+` and did nothing at all when pressed.
+         The six levels are unaffected: there the `-` really does remove a
+         block, and updatePlusMinusState lights it exactly when it can. */
       if (self.cubesPlaced < TOTAL_CUBES) {
         // the next + hint comes from the Idle watcher, not a 0.5 s re-show
         if (!self.checkButtonActivated) Idle.poke();
@@ -1304,6 +1463,15 @@ var Controllers = (function () {
     var activePointer = null, dragging = false, last = null;
     var DRAG_THRESHOLD = 10;
 
+    /* The block beside the +/- buttons is a picture of what is being counted,
+       not a control: the only way to change the count is the + and the -. Its
+       scene Button has nothing wired to it, so it is dropped from hit testing
+       and a tap on it now falls straight through to the counter behind.
+       The item, on the other hand, binds its own pointerdown below, so it takes
+       ownership of its node and stays a pointer target throughout the drag. */
+    if (self.isCube) E.setPassive(hostId, true);
+    else E.ownPointer(hostId);
+
     function gm() { return get('WeightMeasuringGame', f.gameManager); }
     function tut() { return get('WeightGameTutorialController', f.tutorial); }
 
@@ -1427,10 +1595,7 @@ var Controllers = (function () {
     /* the cursor must say what this item can do right now */
     function setCursorState() {
       if (self.isCube) {
-        /* The block beside the +/- buttons is a sample, not a control. It
-           carries a Button component from the scene that nothing ever listens
-           to, so it was advertising a pointer cursor and then doing nothing
-           when a child tapped it. */
+        // display only — see the E.setPassive above; this is just the cursor
         n.el.classList.add('sample');
         return;
       }
@@ -1438,6 +1603,10 @@ var Controllers = (function () {
       el.classList.add('draggable');
       var can = self.enabledComp && !self.dropped && !self.placing;
       el.classList.toggle('nodrag', !can);
+      /* Once the item is in a pan it is spent — the round is played out with
+         the + and the - from here on. So it stops being a pointer target too,
+         instead of sitting in the bowl still flashing under every tap. */
+      E.setPassive(self.node, !can);
       el.classList.toggle('dragging', dragging);
       document.body.classList.toggle('dragging', dragging);
     }
@@ -1572,11 +1741,13 @@ var Controllers = (function () {
     /* Beam, both pans and the needle come from a single sampled pose of one
        authored clip, so they are physically incapable of disagreeing. Anything
        placed in a pan is a child of that pan and therefore rides with it. */
-    function setTilt(v) {
-      self.tilt = v;
-      var clip = v >= 0 ? itemDownClip() : blockDownClip();
-      var len = E.clipLength(clip);
-      anim.sampleAt(clip, Math.abs(v) * len);
+    /* draw the rig at a signed clip fraction: +1 = the item's pan fully down */
+    function applyPose(p) {
+      var clip = p >= 0 ? itemDownClip() : blockDownClip();
+      anim.sampleAt(clip, Math.abs(p) * E.clipLength(clip));
+    }
+
+    function noteSide(v) {
       if (Math.abs(v) < 0.001) self.scaleSide = 'Idle';
       else {
         var itemSideDown = v > 0;
@@ -1585,14 +1756,29 @@ var Controllers = (function () {
       }
     }
 
+    function setTilt(v) {
+      self.tilt = v;
+      applyPose(tiltPose(v));
+      noteSide(v);
+    }
+
     function animateTiltTo(target, dur) {
       var from = self.tilt;
       if (Math.abs(target - from) < 0.0005) { setTilt(target); return; }
+      /* Interpolate the POSE, not the weight ratio. tiltPose has a deliberate
+         step at balance — any imbalance at all leans at least TILT_MIN — and
+         easing the ratio through that step would hold the beam tilted for the
+         whole tween and then snap it flat on the final frame. Easing the pose
+         instead lets the last block swing the beam all the way down to level,
+         which is the whole point of the movement. */
+      var p0 = tiltPose(from), p1 = tiltPose(target);
       var tok = tiltRunner.fresh('tilt');
       tiltRunner.run(function (t) {
         return E.tween(dur, 'Smooth', function (u) {
           if (!E.activeInHierarchy(self.node)) return;   // level was left behind
-          setTilt(from + (target - from) * u);
+          self.tilt = from + (target - from) * u;
+          applyPose(p0 + (p1 - p0) * u);
+          noteSide(self.tilt);
         }, t);
       }, tok);
     }
@@ -1653,12 +1839,13 @@ var Controllers = (function () {
       setButtonVisual(f.minusButton, f.minusCanvasGroup, false);
     };
 
-    self.setPlusMinusInteractableOnly = function (state) {
-      E.setInteractable(f.plusButton, state);
-      E.setInteractable(f.minusButton, state);
-      if (f.plusCanvasGroup) E.setCanvasGroupAlpha(f.plusCanvasGroup, 1);
-      if (f.minusCanvasGroup) E.setCanvasGroupAlpha(f.minusCanvasGroup, 1);
-    };
+    /* `setPlusMinusInteractableOnly` used to live here: it switched the buttons
+       off while explicitly forcing their alpha back to 1, so through the whole
+       of "Place the orange on the balance" — and again while instruction 3 was
+       being read — the + and − sat there in full blue and did nothing. Both of
+       its call sites want a genuinely disabled button, so they call
+       disablePlusMinus() and the rule is simply: a + or − looks usable exactly
+       when it is. */
 
     self.updatePlusMinusState = function () {
       var len = (self.currentSpawnPoints || []).length;
@@ -1741,6 +1928,10 @@ var Controllers = (function () {
       }
       var id = E.instantiate((f.cubePrefab || {}).template, self.activeCubeBasket);
       if (id) {
+        // a block in the pan is the answer being counted, never a control:
+        // the cube and glass-ball prefabs carry an empty Button, the ball
+        // prefab carries none, so both are made scenery the same way
+        E.setPassive(id, true);
         E.setAsLastSibling(id);
         var tp = self.currentTargetPoints[self.cubeIndex];
         // size before positioning: setStagePos measures from the final box
@@ -1895,8 +2086,11 @@ var Controllers = (function () {
       E.addClickListener(f.plusButton, addCube);
       E.addClickListener(f.minusButton, removeCube);
       E.addClickListener(f.checkButton, checkResult);
-      E.setInteractable(f.plusButton, false);
-      E.setInteractable(f.minusButton, false);
+      /* Dimmed, not merely switched off. A level opens on "Place the <item> on
+         the balance", and until that is done neither button can do anything —
+         they used to keep the authored full-blue alpha throughout, so the very
+         first thing on screen was two bright controls that ignored every tap. */
+      self.disablePlusMinus();
       E.setActive(f.checkButton, false);
     });
 
@@ -2189,7 +2383,7 @@ var Controllers = (function () {
       stopGhost();
       self.runner.stop('ghost');
       var g = gm();
-      if (g) g.setPlusMinusInteractableOnly(false);
+      if (g) g.disablePlusMinus();       // still not usable until line 3 is read
       self.runner.run(playInstruction3ThenPlusHint);
     };
 
@@ -2197,9 +2391,10 @@ var Controllers = (function () {
       self.instruction3Completed = false;
       self.plusClicked = false;
       var g = gm();
-      if (g) g.setPlusMinusInteractableOnly(false);
+      if (g) g.disablePlusMinus();
       return playInstructionAndWait(f.instruction3, f.instruction3Audio, tok).then(function () {
         self.instruction3Completed = true;
+        // the line has been read: the + lights up on the word that asks for it
         if (g) g.updatePlusMinusState();
         // "Tap the + button to add blocks" — light the block being counted
         glowSampleBlock(true);
@@ -2300,7 +2495,12 @@ var Controllers = (function () {
         self.instruction3Completed = true;
         E.setActive(f.instructionBar, true);   // OnTryAgain just hid it
         playInstruction(f.instruction3, f.instruction3Audio);
-        g.enablePlusMinus();
+        /* was enablePlusMinus(), which lights BOTH. Try Again on the too-few
+           path has just emptied the pan, so `−` has nothing to remove and
+           removeCube() returns on the spot — it sat there in full blue doing
+           nothing, the same defect the opening screen had. updatePlusMinusState
+           lights each button on its own merits: `+` yes, `−` not yet. */
+        g.updatePlusMinusState();
         showPlusHintAfterDelay();
       }
     }
@@ -2395,6 +2595,7 @@ var Controllers = (function () {
        no animation loop, timer or listener survives the transition. */
     reset: function () {
       Guide.destroy();
+      IntroVoice.unmount();
       clearGlows();
       Idle.reset();
       E.confettiClear();
@@ -2412,6 +2613,7 @@ var Controllers = (function () {
     updateScaleFromPanContents: updateScaleFromPanContents,
     setGlow: setGlow,
     Guide: Guide,
+    IntroVoice: IntroVoice,
     ButtonAnimator: ButtonAnimator,
     TutorialManager: TutorialManager,
     DraggableItem: DraggableItem,
