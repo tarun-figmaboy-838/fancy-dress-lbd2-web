@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QA Report — The Fancy Dress Competition</title>
+<meta name="description" content="Bug-fix and QA report for the Fancy Dress Lbd2 web build.">
+<style>
+:root{
+  --bg:#f6f8fa; --card:#fff; --ink:#131a21; --muted:#5b6b7a; --line:#dfe6ec;
+  --ok:#0f7b4f; --okbg:#e6f6ee; --no:#b02a37; --nobg:#fdecee;
+  --warn:#8a5a00; --warnbg:#fff5e0; --accent:#1b6ea8; --code:#eef2f6;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme=light]){
+    --bg:#0e1418; --card:#161e24; --ink:#e6eef4; --muted:#9bb0c0; --line:#27333c;
+    --ok:#5ddba4; --okbg:#10281f; --no:#ff8f9b; --nobg:#2a1418;
+    --warn:#ffcc70; --warnbg:#2a2110; --accent:#6fc0f5; --code:#101820;
+  }
+}
+:root[data-theme=dark]{
+  --bg:#0e1418; --card:#161e24; --ink:#e6eef4; --muted:#9bb0c0; --line:#27333c;
+  --ok:#5ddba4; --okbg:#10281f; --no:#ff8f9b; --nobg:#2a1418;
+  --warn:#ffcc70; --warnbg:#2a2110; --accent:#6fc0f5; --code:#101820;
+}
+*{box-sizing:border-box}
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+  -webkit-text-size-adjust:100%;
+}
+.wrap{max-width:920px; margin:0 auto; padding:32px 20px 80px}
+header{border-bottom:3px solid var(--accent); padding-bottom:20px; margin-bottom:8px}
+h1{font-size:clamp(24px,4.4vw,34px); line-height:1.2; margin:0 0 6px}
+.sub{color:var(--muted); margin:0}
+.meta{display:flex; flex-wrap:wrap; gap:8px 18px; margin:16px 0 0; font-size:14px; color:var(--muted)}
+.meta b{color:var(--ink); font-weight:600}
+h2{font-size:clamp(19px,3vw,23px); margin:40px 0 4px; padding-top:16px; border-top:1px solid var(--line)}
+h3{font-size:17px; margin:26px 0 6px}
+p{margin:10px 0}
+a{color:var(--accent)}
+code{background:var(--code); padding:1px 5px; border-radius:4px; font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.card{background:var(--card); border:1px solid var(--line); border-radius:12px; padding:18px 20px; margin:16px 0}
+.tag{display:inline-block; font-size:12px; font-weight:700; letter-spacing:.3px; padding:3px 9px; border-radius:99px; vertical-align:2px}
+.t-ok{background:var(--okbg); color:var(--ok)} .t-no{background:var(--nobg); color:var(--no)}
+.t-warn{background:var(--warnbg); color:var(--warn)}
+.scroll{overflow-x:auto; -webkit-overflow-scrolling:touch; margin:12px 0}
+table{border-collapse:collapse; width:100%; font-size:14.5px; min-width:460px}
+th,td{text-align:left; padding:8px 12px; border-bottom:1px solid var(--line); vertical-align:top}
+th{font-size:12.5px; text-transform:uppercase; letter-spacing:.4px; color:var(--muted); font-weight:700}
+tbody tr:last-child td{border-bottom:none}
+td.num{font-variant-numeric:tabular-nums; white-space:nowrap}
+.big{font-size:15px; font-weight:700}
+.was{color:var(--no)} .now{color:var(--ok)}
+ul{margin:10px 0; padding-left:22px} li{margin:5px 0}
+.bug{border-left:4px solid var(--accent); padding-left:16px; margin:28px 0}
+.bug h3{margin-top:0}
+.kv{display:grid; grid-template-columns:auto 1fr; gap:4px 14px; font-size:14.5px; margin:10px 0}
+.kv dt{color:var(--muted); font-weight:600; white-space:nowrap}
+.kv dd{margin:0}
+.note{background:var(--warnbg); border:1px solid var(--warn); border-radius:10px; padding:14px 18px; margin:18px 0}
+.note b{color:var(--warn)}
+footer{margin-top:52px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:13.5px}
+@media print{body{background:#fff} .card{break-inside:avoid}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header>
+  <h1>QA Report — The Fancy Dress Competition</h1>
+  <p class="sub">Six reported bugs: root cause, fix, and evidence.</p>
+  <div class="meta">
+    <span><b>Build</b> commit <code>8acc1e1</code></span>
+    <span><b>Live</b> <a href="/">fancy-dress-lbd2-web-ls34.vercel.app</a></span>
+    <span><b>Repo</b> <a href="https://github.com/tarun-figmaboy-838/fancy-dress-lbd2-web">tarun-figmaboy-838/fancy-dress-lbd2-web</a></span>
+    <span><b>Scope</b> Tutorial + all 6 levels</span>
+  </div>
+</header>
+
+<div class="note">
+  <p style="margin-top:0"><b>What was and was not executed.</b> Everything reported as a
+  number below was produced by a script run against this build — the scene data was
+  walked, the rules were replayed, the sources were parsed. <b>No browser-based visual
+  QA was run</b>; there was no browser, Node or Python available on the machine that
+  made these changes. Items needing a human eye are listed under
+  <a href="#pending">Still to confirm in a browser</a> and are deliberately not
+  claimed as passing.</p>
+</div>
+
+<h2>Summary</h2>
+<div class="scroll">
+<table>
+  <thead><tr><th>#</th><th>Reported</th><th>Root cause</th><th>Evidence</th><th>Status</th></tr></thead>
+  <tbody>
+    <tr><td class="num">1</td><td>Yellow cube responds to clicks</td><td>Unity <code>Button</code> on scenery nothing listens to</td><td class="num">122 nodes made inert</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">2</td><td>Next / Try Again have no hover feedback</td><td>ColorTint only fires on press; no hover state existed</td><td class="num">33 controls, 6 items</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">3</td><td>Hand cursor over the scale and passive art</td><td>Same Buttons, plus a screen-sized backdrop Button</td><td class="num">115 &rarr; 0</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">4</td><td>Unbalanced vs balanced tilt indistinguishable</td><td>Weight ratio fed into a curve that is flat near balance</td><td class="num">1.11&deg; &rarr; 13.14&deg;</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">5</td><td>Cube shows a press/highlight flash</td><td>As #1; press state was gated only in CSS</td><td class="num">33 pressable, 0 scenery</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">6</td><td>+ / &minus; fully blue before the item is placed</td><td>A method that disabled a button while forcing alpha to 1</td><td class="num">3 routes, all 6 levels</td><td><span class="tag t-ok">FIXED</span></td></tr>
+  </tbody>
+</table>
+</div>
+
+<p>Plus one requested addition: a <b>title voice-over button</b> on the start screen,
+top-left. The start screen was authored as one full-screen button whose only job was to
+play the title line, so it was reachable but invisible.</p>
+
+<h2>Static QA — 32 of 32 passed</h2>
+<div class="card">
+<div class="scroll">
+<table>
+  <thead><tr><th>Group</th><th>Checks</th><th>Result</th></tr></thead>
+  <tbody>
+    <tr><td>Source integrity</td><td>8 JS files parse; 2 stylesheets brace-balanced; <code>js/data.js</code> and <code>assets/</code> untouched</td><td><span class="tag t-ok">5/5</span></td></tr>
+    <tr><td>Deploy safety</td><td>All 99 asset references resolve; God Mode strips cleanly; every file <code>index.html</code> loads exists</td><td><span class="tag t-ok">4/4</span></td></tr>
+    <tr><td>Bug coverage</td><td>Each of the six fixes present in source, by exact match</td><td><span class="tag t-ok">15/15</span></td></tr>
+    <tr><td>Regression harness</td><td>Two new God Mode checks exist, are wired to the panel and run inside <em>Run all</em></td><td><span class="tag t-ok">8/8</span></td></tr>
+  </tbody>
+</table>
+</div>
+<p style="margin-bottom:0"><b>Deploy verified live.</b> The GitHub Actions run for
+<code>8acc1e1</code> succeeded, and the deployed files were fetched back and inspected:
+<code>grayscale(0.9)</code>, <code>#stage&nbsp;{&nbsp;cursor:&nbsp;default</code>,
+<code>.intro-vo</code>, <code>scale:&nbsp;1.05</code> and <code>hover:&nbsp;hover</code>
+are present in the live stylesheet; <code>tiltPose</code>, <code>TILT_MIN&nbsp;=&nbsp;0.6</code>,
+<code>IntroVoice</code> and <code>ownPointer</code> in the live
+<code>controllers.js</code>; <code>setPassive</code>, <code>canPress</code>,
+<code>pointercancel</code> and <code>n.backdrop</code> in the live <code>engine.js</code>;
+and the shipped <code>index.html</code> contains no <code>god-mode</code> reference.</p>
+</div>
+
+<h2>The six bugs</h2>
+
+<div class="bug">
+<h3>1 &middot; The yellow cube answered clicks <span class="tag t-ok">FIXED</span></h3>
+<p>The block is not special. Unity attaches a <code>Button</code> to a great deal of
+artwork that no script ever listens to, and this port gave every one of them the full
+control treatment — pointer cursor and press tint.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Buttons in both scenes</th><th class="num">Count</th></tr></thead>
+  <tbody>
+    <tr><td>Real controls (+, &minus;, Check, Next, Try Again, Let's Go, intro)</td><td class="num">34</td></tr>
+    <tr><td>The draggable item — never clicked, but owns its own drag</td><td class="num">6</td></tr>
+    <tr><td>Alpha-0 slot markers parented inside the two pans</td><td class="num">88</td></tr>
+    <tr><td>Start Items copies of the item, the block and the +/&minus;</td><td class="num">24</td></tr>
+    <tr><td>The sample block — 6 levels <b>and</b> the tutorial</td><td class="num">7</td></tr>
+    <tr><td>Tutorial's book, tutorial's &minus;, level 6's unused Next</td><td class="num">3</td></tr>
+    <tr><td class="big">Total</td><td class="num big">162</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The rule now lives in one place: <b>a Button is a control only while something is
+listening to it</b> — an inspector-wired call, or a runtime <code>addClickListener</code>.
+Everything else is dropped out of hit testing, so a tap falls through to the artwork
+behind: no cursor, no flash, no click. Nothing moves and nothing changes size.</p>
+<p>Three cases are named explicitly, because a blanket rule would have broken them: the
+<b>draggable item</b> (claims its node, so dragging is unaffected; becomes inert only
+once it is resting in a pan), <b>spawned blocks</b> (two prefabs carry an empty Button,
+one carries none), and the <b>tutorial's &minus;</b>, which had no listener in the
+original or here and used to light up after the first block and do nothing.</p>
+</div>
+
+<div class="bug">
+<h3>2 &middot; No hover feedback on Next / Try Again <span class="tag t-ok">FIXED</span></h3>
+<p>Unity's ColorTint transition only fires on <em>press</em>, so with a mouse there was
+no way to tell Next or Try Again from the artwork around them until after clicking.</p>
+<dl class="kv">
+  <dt>Hover</dt><dd><code>scale 1.05</code>, <code>brightness 1.07</code></dd>
+  <dt>Press</dt><dd><code>scale 0.96</code>, <code>brightness 0.92</code></dd>
+  <dt>Timing</dt><dd>0.13&nbsp;s ease-out both ways</dd>
+  <dt>Applies to</dt><dd>All six levels' Next, Try Again, Check, + and &minus;, plus the tutorial's, Let's Go and the new voice button</dd>
+</dl>
+<p>Three deliberate constraints. It <b>never writes <code>transform</code></b> — the
+engine owns that property and rewrites it on every relayout, and Let's Go has a scale
+tween running on it every frame; the independent <code>scale</code> property composes
+instead of fighting. It <b>never fires on touch</b>, because <code>:hover</code> sticks
+after a tap and would leave the last button looking permanently lit. And it
+<b>never lights up something unusable</b> — disabled buttons, scenery, the backdrop and
+the draggable item are all excluded.</p>
+</div>
+
+<div class="bug">
+<h3>3 &middot; Hand cursor over the balance and passive art <span class="tag t-ok">FIXED</span></h3>
+<p>Resolving the effective cursor for every node in both scenes, across all six levels
+and the tutorial:</p>
+<div class="scroll">
+<table>
+  <thead><tr><th></th><th class="num">Nodes wrongly showing a hand</th></tr></thead>
+  <tbody>
+    <tr><td>Before</td><td class="num big was">115</td></tr>
+    <tr><td>After</td><td class="num big now">0</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Most of it was the <b>88 alpha-0 slot markers</b> — invisible, but sitting exactly
+over the plates and arms, each carrying an empty Button. The start screen was the other
+half: <code>Intro</code> is anchored <code>0,0&nbsp;&rarr;&nbsp;1,1</code>, so the whole
+1920&times;1080 picture was a Button claiming a pointer cursor, and because
+<code>cursor</code> inherits, everything inside it did too. Any Button covering half the
+canvas or more is now treated as a backdrop: still clickable, no cursor, no feedback.
+The threshold is measured, not guessed — the largest real control in either scene is
+Let's Go at <b>8.5%</b> of the canvas.</p>
+<p>One hand deliberately stays: <code>grab</code> on the item while it is waiting to be
+placed. Dragging it onto the balance is the whole mechanic, and the instruction bar
+literally asks for it. It is a different cursor from <code>pointer</code>, it appears
+only once the bar has asked, and it is gone the moment the item is in a pan.</p>
+</div>
+
+<div class="bug">
+<h3>4 &middot; Unbalanced and balanced looked the same <span class="tag t-ok">FIXED</span></h3>
+<p>Every curve in the authored tilt clips is two keys with zero tangents, so the pose at
+clip fraction <em>t</em> is exactly <code>smoothstep(t) = 3t&sup2; &minus; 2t&sup3;</code> —
+and smoothstep is <b>flat at both ends</b>. Feeding it the raw weight ratio put the one
+reading the child has to make in the flattest part of the curve.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Needed</th><th>Level</th><th class="num">One block out — before</th><th class="num">One block out — after</th></tr></thead>
+  <tbody>
+    <tr><td class="num">7</td><td>Watermelon, Cup</td><td class="num was">1.11&deg;</td><td class="num now">13.14&deg;</td></tr>
+    <tr><td class="num">6</td><td>Pumpkin, Shoe</td><td class="num was">1.48&deg;</td><td class="num now">13.33&deg;</td></tr>
+    <tr><td class="num">4</td><td>Toy boat, Orange</td><td class="num was">3.13&deg;</td><td class="num now">14.00&deg;</td></tr>
+    <tr><td class="num">3</td><td>Tutorial</td><td class="num was">5.19&deg;</td><td class="num now">14.67&deg;</td></tr>
+  </tbody>
+</table>
+</div>
+<p>The exact comparison in the report — <b>8 balls against 7</b> — goes from
+<b class="was">1.1&deg;</b> to <b class="now">13.1&deg;</b>, a <b>12&times;</b>
+difference, and the last block now swings the pan 34 units instead of 3. Too many blocks
+leans the other way by the same amount, so <em>too few</em> and <em>too many</em> are
+opposite pictures rather than two shades of almost-level.</p>
+<p>The pose is chosen first now and the clip time derived from it by inverting the
+smoothstep. Three properties are kept: every block still moves the balance (by an
+<em>equal</em> step, where the old steps crowded all their travel into the middle of the
+count); the authored poses are untouched at both extremes and at level; and the tween
+interpolates the pose rather than the ratio, so the final block carries the beam smoothly
+all the way down instead of snapping flat on the last frame.</p>
+</div>
+
+<div class="bug">
+<h3>5 &middot; Press / highlight flash on the cube <span class="tag t-ok">FIXED</span></h3>
+<p>The same root cause as #1, so it goes away with it. Two things were tightened on top.
+The press class is no longer added to scenery <em>at all</em> — the exclusions used to
+live only in the stylesheet, so a press state could sit on a node with no business
+reporting one. And a <b>cancelled touch no longer sticks</b>: the class was cleared on
+<code>pointerup</code> and <code>pointerleave</code> but not <code>pointercancel</code>,
+which is what a system gesture fires <em>instead</em> of either, leaving the button
+dimmed and shrunk for good. That one was latent, not reported.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Nodes that can show a press highlight</th><th class="num">Count</th></tr></thead>
+  <tbody>
+    <tr><td>Real controls</td><td class="num now">33</td></tr>
+    <tr><td>Scenery</td><td class="num now">0</td></tr>
+  </tbody>
+</table>
+</div>
+</div>
+
+<div class="bug">
+<h3>6 &middot; + and &minus; fully blue before the item is placed <span class="tag t-ok">FIXED</span></h3>
+<p>A level opens on <em>"Place the orange on the balance"</em>, and until that is done
+neither button can do anything — but both sat there in full blue. The cause was a method
+whose entire job was to decouple appearance from capability: it switched the buttons off
+while explicitly forcing their alpha back to 1. It is gone.</p>
+<p>The same defect was hiding in <b>Try Again after too few blocks</b>, which lit
+<em>both</em> buttons immediately after emptying the pan — so &minus; came back in full
+blue with nothing to remove.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Moment</th><th>+</th><th>&minus;</th></tr></thead>
+  <tbody>
+    <tr><td>Level opens, <em>"Place the orange&hellip;"</em></td><td>dim</td><td>dim</td></tr>
+    <tr><td>Item dropped, instruction 3 reading</td><td>dim</td><td>dim</td></tr>
+    <tr><td>Instruction 3 finishes</td><td class="now"><b>blue</b></td><td>dim</td></tr>
+    <tr><td>First block added</td><td class="now"><b>blue</b></td><td class="now"><b>blue</b></td></tr>
+    <tr><td>Block limit reached</td><td>dim</td><td class="now"><b>blue</b></td></tr>
+    <tr><td>Check pressed</td><td>dim</td><td>dim</td></tr>
+    <tr><td>Try Again, too few</td><td class="now"><b>blue</b></td><td>dim <em>(was blue)</em></td></tr>
+  </tbody>
+</table>
+</div>
+<p>Dimming alone was not enough: the authored disabled alpha turns a blue button into a
+<em>paler blue</em>, which at a glance is still the live control it is drawn as. Draining
+the colour is what makes it read as grey, so a disabled control also takes
+<code>grayscale(0.9)</code>. Audited: <b>15 nodes can take the disabled look and all 15
+are real controls</b> — the exclusions are what stop it greying the boat, the orange and
+the tutorial's book, whose Buttons are authored non-interactable.</p>
+<p><b>Scope:</b> all six levels had this, through three separate per-level routes. The
+tutorial did <em>not</em> — its controller always set alpha alongside interactable.</p>
+</div>
+
+<h2>New regression guards</h2>
+<div class="card">
+<p style="margin-top:0">Two live-DOM checks were added to the God Mode developer layer,
+both included in <em>Run&nbsp;all</em>. They are stripped from the published learner
+build and cannot affect it.</p>
+<ul>
+  <li><b>Cursors</b> — reads the cursor the browser actually resolved for every visible
+  node and fails on any hand that is not a Button with a listener or an item that can
+  still be picked up.</li>
+  <li><b>Press</b> — drives the reported repro for real: finds the sample block, asserts
+  it takes no pointer events, asserts a tap at its centre lands on the counter behind it,
+  then dispatches a real <code>pointerdown</code> and asserts the block's computed
+  filter, scale and opacity are unchanged before, during and after.</li>
+</ul>
+</div>
+
+<h2 id="pending">Still to confirm in a browser</h2>
+<div class="note">
+<p style="margin-top:0">These are <b>not</b> claimed as passing. They need a person, or a
+headless run, against the live build.</p>
+<ul>
+  <li>Dragging the item still works on all six levels, mouse and touch. <em>(The item is
+  the one empty Button that had to stay live — the highest-risk item in this change.)</em></li>
+  <li>+, &minus;, Check, Try Again respond on levels 2&ndash;6, which arm on activation
+  rather than at load.</li>
+  <li>The balance's final swing to level reads smoothly, and 8 vs 7 blocks is obvious.</li>
+  <li>No button is left looking lit after a tap on a touchscreen.</li>
+  <li>The title voice-over button plays and stops, and disappears on Let's Go.</li>
+  <li>God Mode &rarr; <em>Run all</em>, including the two new checks, on the tutorial and
+  each level.</li>
+</ul>
+</div>
+
+<h2>Notes worth knowing</h2>
+<ul>
+  <li><b>Two deliberate behaviour changes</b>, both flagged rather than slipped in: the
+  tutorial's &minus; now stays greyed for the whole demo (it has no function there, in
+  the original or here), and tapping the start-screen background no longer dims the whole
+  picture (it still plays the title line).</li>
+  <li><b>Level 1 authors a disabled alpha of 0.6 where levels 2&ndash;6 use 0.4.</b> Both
+  read clearly as disabled now that colour is drained, so this is not a bug — but Level 1's
+  greyed buttons are slightly more visible than the others'. Not changed.</li>
+  <li><b><code>js/data.js</code> and <code>assets/</code> were not touched.</b> The scene
+  data stays machine-generated; no positions, sprites, clips or timings were altered.</li>
+</ul>
+
+<footer>
+  <p>Generated for commit <code>8acc1e1</code> &middot;
+  <a href="/">Open the game</a> &middot;
+  <a href="https://github.com/tarun-figmaboy-838/fancy-dress-lbd2-web">Source</a></p>
+  <p>Static analysis was executed against this build. Browser-based visual QA was not —
+  see <a href="#pending">Still to confirm in a browser</a>.</p>
+</footer>
+
+</div>
+</body>
+</html>

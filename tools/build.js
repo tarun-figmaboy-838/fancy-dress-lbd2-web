@@ -13,8 +13,10 @@ const path = require('path');
 const ROOT = path.resolve(__dirname, '..');
 const OUT = path.join(ROOT, 'dist');
 
-/* Everything the game needs, and nothing else. */
-const COPY = ['index.html', 'favicon.png', 'css', 'js', 'assets'];
+/* Everything the game needs, and nothing else — plus the QA report, which is a
+   standalone page nothing in the game links to. It ships so the report has a
+   public URL that can be handed to anyone without a login. */
+const COPY = ['index.html', 'favicon.png', 'css', 'js', 'assets', 'qa-report.html'];
 const SKIP_DIRS = new Set(['god-mode', 'node_modules', 'dist', 'tools', '.git', '.github']);
 
 function rmrf(p) {
