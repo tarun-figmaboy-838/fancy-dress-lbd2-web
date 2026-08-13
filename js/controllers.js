@@ -793,6 +793,18 @@ var Controllers = (function () {
     return (v < 0 ? -1 : 1) * Math.max(0, Math.min(1, t));
   }
 
+  /* How long after a result is announced before its button appears.
+
+     Check, Try Again and Next all used to wait for the ENTIRE voice-over line
+     to finish — four to five seconds of a child looking at a screen with
+     nothing to press, and on a correct answer Next came only after "Well done",
+     a two second pause and the whole "weighs the same as" line, so ten seconds
+     or more. The line is what explains the result; the button is what acts on
+     it, and there is no reason the second has to wait for the first. They now
+     arrive shortly after the line starts, so the explanation keeps playing
+     while the way forward is already in reach. */
+  var BUTTON_BEAT = 0.7;
+
   function newScaleState() {
     return {
       leftItems: [],        // [{ id, weight, kind }]
@@ -1431,7 +1443,12 @@ var Controllers = (function () {
     }
 
     function enableCheckButtonWithHint(tok) {
-      return E.wait(fld(f, 'cubeMoveDuration', 0.8) + 0.3, tok).then(function () {
+      /* Was cubeMoveDuration + 0.3, and the tutorial authors cubeMoveDuration
+         at 1.5 — so Check appeared 1.8 s after the third block, waiting out a
+         Unity move duration for a spawn this port animates in 0.3 s. That is
+         one and a half seconds of dead screen at the most important moment in
+         the demo. It now waits for the block to settle and no longer. */
+      return E.wait(0.45, tok).then(function () {
         showWithPop(f.checkButton);
         E.setInteractable(f.checkButton, true);
         self.checkButtonActivated = true;
@@ -1470,6 +1487,14 @@ var Controllers = (function () {
             return popWithNarration('The ball weighs the same as 3 blocks',
               f.instruction8Audio, placed.slice(0, 1), placed.slice(1), t);
           }, self.runner.fresh('equalPop'));
+          /* Next comes up while the label line is still being read, the same
+             way the six levels raise theirs. */
+          self.runner.run(function (t) {
+            return E.wait(BUTTON_BEAT, t).then(function () {
+              showWithPop(f.nextButton);
+              E.setInteractable(f.nextButton, true);
+            });
+          }, self.runner.fresh('nextBtn'));
           if (f.instruction8Audio) {
             var s = src(); s.stop(); s.setClip(f.instruction8Audio); s.play();
             return E.waitUntil(function () { return !s.isPlaying(); }, tok);
@@ -2568,6 +2593,11 @@ var Controllers = (function () {
             return popWithNarration(f.instruction8, f.instruction8Audio,
                                     c.items, c.blocks, t);
           }, self.runner.fresh('equalPop'));
+          /* Next comes up while the "weighs the same as" line is still being
+             read, rather than after it — the explanation carries on, the way on
+             is already there. Not on the last level, which ends on the game
+             over panel instead. */
+          if (!f.isLastLevel) raiseButtonSoon(f.nextButton, 'nextBtn');
           return playInstructionAndWait(f.instruction8, f.instruction8Audio, tok);
         })
         .then(function () {
@@ -2578,16 +2608,25 @@ var Controllers = (function () {
               if (f.finalVO) { var s = src(); s.stop(); s.setClip(f.finalVO); s.play(); }
             });
           }
-          showWithPop(f.nextButton);
+          showWithPop(f.nextButton);   // no-op if the beat above already raised it
           Idle.poke();       // Next is offered by the Idle watcher if they wait
         });
     }
 
+    /* Raise a button a beat from now, on its own cancellable token so a level
+       change cannot leave it pending. */
+    function raiseButtonSoon(id, key) {
+      self.runner.run(function (t) {
+        return E.wait(BUTTON_BEAT, t).then(function () { showWithPop(id); });
+      }, self.runner.fresh(key));
+    }
+
     self.onLessCubes = function () {
       E.setActive(f.instructionBar, true);
+      // Try Again arrives while "the item is heavier..." is still being read
+      raiseButtonSoon(f.tryAgainButton, 'tryAgainBtn');
       self.runner.run(function (tok) {
         return playInstructionAndWait(f.instruction5, f.instruction5Audio, tok).then(function () {
-          showWithPop(f.tryAgainButton);
           startTryAgainHint();
         });
       });
@@ -2595,9 +2634,9 @@ var Controllers = (function () {
 
     self.onMoreCubes = function () {
       E.setActive(f.instructionBar, true);
+      raiseButtonSoon(f.tryAgainButton, 'tryAgainBtn');
       self.runner.run(function (tok) {
         return playInstructionAndWait(f.instruction6, f.instruction6Audio, tok).then(function () {
-          showWithPop(f.tryAgainButton);
           startTryAgainHint();
         });
       });

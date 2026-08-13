@@ -17,7 +17,6 @@
       ]
     },
     {
-      "comment": "The code is NOT content-hashed - engine.js is always engine.js - so a cached copy is a stale copy, and because the three scripts are cached independently a visitor can end up running engine.js from one deploy against controllers.js from another. Observed live: X-Vercel-Cache HIT with Age 1832 on engine.js while controllers.js was current. They must revalidate, at the edge as well as in the browser.",
       "source": "/(js|css)/(.*)",
       "headers": [
         { "key": "Cache-Control", "value": "public, max-age=0, s-maxage=0, must-revalidate" }

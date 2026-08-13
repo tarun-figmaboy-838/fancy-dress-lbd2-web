@@ -184,14 +184,16 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
  * single frame reads as a glitch rather than as something being offered, so
  * they scale and fade up with a slight overshoot. On the sprite layer, never on
  * the element the engine positions — applyLayout owns that transform. */
+/* Short and front-loaded: it is readable within about 100 ms and settled by
+   260. An arrival that takes too long is just a slower way of being late. */
 @keyframes btn-pop-in {
-  0%   { opacity: 0; transform: scale(.72) translate3d(0, 12px, 0); }
-  55%  { opacity: 1; transform: scale(1.06) translate3d(0, -3px, 0); }
-  78%  { opacity: 1; transform: scale(.985) translate3d(0, 1px, 0); }
+  0%   { opacity: 0; transform: scale(.86) translate3d(0, 7px, 0); }
+  45%  { opacity: 1; transform: scale(1.045) translate3d(0, -2px, 0); }
+  72%  { opacity: 1; transform: scale(.99) translate3d(0, 1px, 0); }
   100% { opacity: 1; transform: scale(1) translate3d(0, 0, 0); }
 }
 .un.pop-in > .un-bg {
-  animation: btn-pop-in .42s cubic-bezier(.2, .9, .3, 1) 1 both;
+  animation: btn-pop-in .26s cubic-bezier(.22, .9, .3, 1) 1 both;
 }
 
 @media (prefers-reduced-motion: reduce) {
