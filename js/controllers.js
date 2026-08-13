@@ -1381,8 +1381,20 @@ var Controllers = (function () {
           });
           self.isCubeMoving = false;
           updateTutorialPlusMinus();
-          glowSampleBlock(true);         // still counting: the block is the cue again
+          /* The idle clock is reset FIRST and the hint raised after it. poke()
+             withdraws whatever is currently being offered, so doing it the
+             other way round would take back the hand on the very frame it
+             appeared. */
           Idle.poke();
+          /* Then point at the + straight away. This is a demonstration, not a
+             puzzle: taking a block back off means the child has stepped off the
+             scripted path, and in the tutorial that is answered at once rather
+             than after the idle watcher's eight-second wait. The six levels
+             keep their idle-only hinting — there, exploring is the exercise. */
+          if (self.cubesPlaced < TOTAL_CUBES && !self.checkButtonActivated) {
+            showHintOnButton(f.plusButton);
+            glowSampleBlock(true);       // still counting: the block is the cue again
+          }
         });
     }
 
