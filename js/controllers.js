@@ -1487,14 +1487,9 @@ var Controllers = (function () {
             return popWithNarration('The ball weighs the same as 3 blocks',
               f.instruction8Audio, placed.slice(0, 1), placed.slice(1), t);
           }, self.runner.fresh('equalPop'));
-          /* Next comes up while the label line is still being read, the same
-             way the six levels raise theirs. */
-          self.runner.run(function (t) {
-            return E.wait(BUTTON_BEAT, t).then(function () {
-              showWithPop(f.nextButton);
-              E.setInteractable(f.nextButton, true);
-            });
-          }, self.runner.fresh('nextBtn'));
+          /* Next waits for the label line, the same rule the six levels follow:
+             "Weight of ball = weight of 3 blocks" is the lesson, so the button
+             that moves past it does not appear while it is still being said. */
           if (f.instruction8Audio) {
             var s = src(); s.stop(); s.setClip(f.instruction8Audio); s.play();
             return E.waitUntil(function () { return !s.isPlaying(); }, tok);
@@ -2593,11 +2588,12 @@ var Controllers = (function () {
             return popWithNarration(f.instruction8, f.instruction8Audio,
                                     c.items, c.blocks, t);
           }, self.runner.fresh('equalPop'));
-          /* Next comes up while the "weighs the same as" line is still being
-             read, rather than after it — the explanation carries on, the way on
-             is already there. Not on the last level, which ends on the game
-             over panel instead. */
-          if (!f.isLastLevel) raiseButtonSoon(f.nextButton, 'nextBtn');
+          /* Next deliberately does NOT come up early. "The toy boat weighs the
+             same as 4 blocks!" is the whole lesson, and a Next sitting there
+             while it plays is an invitation to skip it. Try Again and Check
+             answer a state the child can already see, so those arrive at once;
+             Next moves past something they are still being told, so it waits
+             for the telling to finish. */
           return playInstructionAndWait(f.instruction8, f.instruction8Audio, tok);
         })
         .then(function () {
@@ -2608,7 +2604,7 @@ var Controllers = (function () {
               if (f.finalVO) { var s = src(); s.stop(); s.setClip(f.finalVO); s.play(); }
             });
           }
-          showWithPop(f.nextButton);   // no-op if the beat above already raised it
+          showWithPop(f.nextButton);   // the line has finished; now offer the way on
           Idle.poke();       // Next is offered by the Idle watcher if they wait
         });
     }
