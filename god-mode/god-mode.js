@@ -293,6 +293,20 @@
         Engine.confetti(id || (r && r.id));
         U.toast('confetti replayed');
       },
+      /* Play every interaction sound in turn, so the layer can be heard
+         without having to reach the moment in the game that triggers each one. */
+      sfx: function () {
+        var names = Engine.Audio.sfxNames ? Engine.Audio.sfxNames() : [];
+        if (!names.length) { U.toast('no sfx registered'); return; }
+        var i = 0;
+        (function nextOne() {
+          if (i >= names.length) { U.toast('played ' + names.length + ' sounds'); return; }
+          var n = names[i++];
+          U.toast('sfx: ' + n);
+          Engine.Audio.sfx(n, { i: i });   // the counting sounds walk up the scale
+          setTimeout(nextOne, 750);
+        })();
+      },
       rescan: function () { self.rescan(); U.toast('list rebuilt'); },
       copySel: function () { ed.copySelected(); },
       copyPatch: function () { ed.copyAllEdits(); },
@@ -423,7 +437,8 @@
     '<button data-act="solve">Fill correct</button><button data-act="check">Check</button>' +
     '<button data-act="resetCubes">Clear blocks</button></div>' +
     '<div class="godRow"><button data-act="showGuide">Show guide</button>' +
-    '<button data-act="hideGuide">Hide guide</button><button data-act="confetti">Replay confetti</button>' +
+    '<button data-act="hideGuide">Hide guide</button><button data-act="sfx">Play all SFX</button>' +
+    '<button data-act="confetti">Replay confetti</button>' +
     '</div></section>' +
     '<section><h4>Live layout editor <em id="godSelName">nothing selected</em></h4>' +
     '<div class="godRow"><select id="godPick"></select><button data-act="rescan">⟳</button></div>' +

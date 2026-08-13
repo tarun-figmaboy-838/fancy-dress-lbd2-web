@@ -1020,6 +1020,7 @@ var Controllers = (function () {
       checkButtonActivated: false,
       currentCubeIndex: 0,
       cubesPlaced: 0,
+      isCubeMoving: false,
       hintOn: null,
       animState: 'New State'
     };
@@ -1280,7 +1281,16 @@ var Controllers = (function () {
       setButtonEnabled(f.minusButton, on);
     }
 
+    /* Which of the two can be pressed right now, by the same rule the six
+       levels use in updatePlusMinusState: `+` while there is room for another
+       block, `−` while there is one to take back. */
+    function updateTutorialPlusMinus() {
+      setButtonEnabled(f.plusButton, self.cubesPlaced < TOTAL_CUBES);
+      setButtonEnabled(f.minusButton, self.cubesPlaced > 0);
+    }
+
     function onPlusButtonClicked() {
+      if (self.isCubeMoving) return;                 // one block at a time
       if (self.currentCubeIndex >= (f.cubeSpawnPoints || []).length ||
           self.cubesPlaced >= TOTAL_CUBES) return;
       hideHintHand();
@@ -1294,14 +1304,8 @@ var Controllers = (function () {
       // the block landing rather than all at once at the end
       animateTutorialTilt(tutorialTiltTarget(), 0.5);
 
-      /* The tutorial's `-` stays greyed for the whole demo. It has no listener
-         in the original and none here — the demonstration is "add three
-         blocks", and nothing ever asks the child to take one away. It used to
-         be lit the moment the first block landed, so from then on it looked
-         every bit as tappable as the `+` and did nothing at all when pressed.
-         The six levels are unaffected: there the `-` really does remove a
-         block, and updatePlusMinusState lights it exactly when it can. */
       if (self.cubesPlaced < TOTAL_CUBES) {
+        updateTutorialPlusMinus();       // `−` can take that block back off now
         // the next + hint comes from the Idle watcher, not a 0.5 s re-show
         if (!self.checkButtonActivated) Idle.poke();
       } else {
@@ -1315,6 +1319,59 @@ var Controllers = (function () {
         setStep(2);
         self.runner.run(function (t) { return enableCheckButtonWithHint(t); });
       }
+    }
+
+    /* ----------------------------------------------------------------------
+       The tutorial's `−` takes a block back off, the way the six levels do.
+
+       It had no listener in the original, so it did nothing at all — and it was
+       lit from the first block onward regardless, which is a control inviting a
+       tap it cannot answer. Leaving it faded for the whole demo was honest but
+       odd to look at, so it does the job its artwork promises instead.
+
+       It can only ever run at one or two blocks. At three, onPlusButtonClicked
+       disables both buttons and hands over to BallAnimation and Check, and that
+       clip is one-way — so the scripted sequence is never re-entered backwards.
+       -------------------------------------------------------------------- */
+    function onMinusButtonClicked() {
+      if (self.isCubeMoving || self.checkButtonActivated) return;
+      if (self.cubesPlaced <= 0) return;
+      var idx = self.cubesPlaced - 1;
+      var id = self.spawned[idx];
+      if (!id) return;
+      hideHintHand();
+      self.isCubeMoving = true;
+      self.cubesPlaced--;
+      self.currentCubeIndex = self.cubesPlaced;
+      self.spawned.length = self.cubesPlaced;
+      E.Audio.sfx('remove', { i: idx });
+      // the pans ease back out by exactly the step the block put in
+      animateTutorialTilt(tutorialTiltTarget(), 0.5);
+      setPlusMinusEnabled(false);        // neither is pressable mid-move
+      self.runner.run(function (t) { return retreatCube(id, idx, t); });
+    }
+
+    function retreatCube(id, idx, tok) {
+      return doScale(id, 0, 0.2, 'InBack', tok)
+        .then(function () {
+          // back to the sample it came from, the same return the levels animate
+          var sp = (f.cubeSpawnPoints || [])[idx];
+          if (sp && E.node(sp)) { var p = E.stagePos(sp); E.setStagePos(id, p[0], p[1]); }
+          E.setScale(id, 0);
+          return doScale(id, 1, 0.25, 'OutBack', tok);
+        })
+        .then(function () {
+          E.destroy(id);
+          // re-centre what is left, exactly as spawnAndMoveCube does
+          self.spawned.forEach(function (cid, i) {
+            var q = pileSlot(f.cubeTargetPositions, i, self.spawned.length);
+            if (q) E.setAnchoredPos(cid, q[0], q[1]);
+          });
+          self.isCubeMoving = false;
+          updateTutorialPlusMinus();
+          glowSampleBlock(true);         // still counting: the block is the cue again
+          Idle.poke();
+        });
     }
 
     function enableCheckButtonWithHint(tok) {
@@ -1415,6 +1472,7 @@ var Controllers = (function () {
       // neither button can be used until instruction 6, so neither invites a tap
       setPlusMinusEnabled(false);
       E.addClickListener(f.plusButton, onPlusButtonClicked);
+      E.addClickListener(f.minusButton, onMinusButtonClicked);
       E.addClickListener(f.checkButton, onCheckButtonClicked);
       E.setInteractable(f.checkButton, false);
       E.addClickListener(f.nextButton, function () {

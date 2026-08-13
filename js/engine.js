@@ -1101,12 +1101,25 @@ var Engine = (function () {
     var COUNT_SCALE = [523.25, 587.33, 659.25, 783.99, 880.00,
                        1046.50, 1174.66, 1318.51, 1567.98];   // C5 D E G A C6 D E G
 
+    /* One gain for the whole interaction layer, so its level against the
+       voice-over is a single number rather than nine. Dry — the echo bus is
+       kept for the celebration, since echo on a repeated tap turns to mud. */
+    var sfxGain = null, sfxVolume = 0.85;
+    function sfxBus(c) {
+      if (!sfxGain || sfxGain.context !== c) {
+        sfxGain = c.createGain();
+        sfxGain.connect(c.destination);
+      }
+      sfxGain.gain.value = sfxVolume;
+      return sfxGain;
+    }
+
     function blip(c, t0, freq, dur, peak, type) {
       var g = c.createGain();
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.exponentialRampToValueAtTime(peak, t0 + 0.006);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      g.connect(c.destination);                      // dry on purpose
+      g.connect(sfxBus(c));
       var o = c.createOscillator();
       o.type = type || 'triangle';
       o.frequency.setValueAtTime(freq, t0);
@@ -1119,7 +1132,7 @@ var Engine = (function () {
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      g.connect(c.destination);
+      g.connect(sfxBus(c));
       var o = c.createOscillator();
       o.type = type || 'sine';
       o.frequency.setValueAtTime(f1, t0);
@@ -1136,41 +1149,41 @@ var Engine = (function () {
     /* a block goes on: one step up the scale, with a little air above it */
     function addSting(c, t0, o) {
       var f = step(o);
-      blip(c, t0, f, 0.13, 0.075, 'triangle');
-      blip(c, t0, f * 2, 0.055, 0.020, 'sine');
+      blip(c, t0, f, 0.15, 0.160, 'triangle');
+      blip(c, t0, f * 2, 0.06, 0.045, 'sine');
     }
     /* a block comes off: the note it was, then a step down under it */
     function removeSting(c, t0, o) {
       var f = step(o);
-      blip(c, t0, f, 0.10, 0.055, 'sine');
-      blip(c, t0 + 0.05, f * 0.7937, 0.11, 0.040, 'sine');
+      blip(c, t0, f, 0.11, 0.125, 'sine');
+      blip(c, t0 + 0.05, f * 0.7937, 0.12, 0.095, 'sine');
     }
     /* the item leaves the plinth */
-    function pickupSting(c, t0) { glide(c, t0, 430, 720, 0.10, 0.050, 'sine'); }
+    function pickupSting(c, t0) { glide(c, t0, 430, 720, 0.11, 0.115, 'sine'); }
     /* and lands in the pan: something with weight arrives, then it counts */
     function dropSting(c, t0) {
-      glide(c, t0, 250, 120, 0.17, 0.115, 'sine');
-      blip(c, t0 + 0.02, 783.99, 0.09, 0.040, 'triangle');
+      glide(c, t0, 250, 120, 0.18, 0.240, 'sine');
+      blip(c, t0 + 0.02, 783.99, 0.10, 0.095, 'triangle');
     }
     /* released somewhere it cannot go — soft, and over almost before it starts */
     function refuseSting(c, t0) {
-      blip(c, t0, 392.00, 0.10, 0.045, 'sine');
-      blip(c, t0 + 0.08, 311.13, 0.12, 0.040, 'sine');
+      blip(c, t0, 392.00, 0.11, 0.105, 'sine');
+      blip(c, t0 + 0.08, 311.13, 0.13, 0.090, 'sine');
     }
     /* Not the right count. Warm and downward, deliberately NOT a buzzer: this
        is a five-year-old being told "not yet", and the game says so out loud a
        moment later anyway. */
     function wrongSting(c, t0) {
-      blip(c, t0, 587.33, 0.15, 0.070, 'triangle');
-      blip(c, t0 + 0.11, 493.88, 0.20, 0.060, 'triangle');
-      blip(c, t0 + 0.11, 496.35, 0.20, 0.026, 'sine');     // detuned, softens the edge
+      blip(c, t0, 587.33, 0.16, 0.155, 'triangle');
+      blip(c, t0 + 0.11, 493.88, 0.21, 0.135, 'triangle');
+      blip(c, t0 + 0.11, 496.35, 0.21, 0.060, 'sine');     // detuned, softens the edge
     }
     /* a plain control was pressed */
-    function tapSting(c, t0) { blip(c, t0, 880.00, 0.055, 0.042, 'triangle'); }
+    function tapSting(c, t0) { blip(c, t0, 880.00, 0.06, 0.100, 'triangle'); }
     /* moving on: Next, Try Again */
     function navSting(c, t0) {
-      blip(c, t0, 659.25, 0.085, 0.052, 'triangle');
-      blip(c, t0 + 0.07, 987.77, 0.12, 0.046, 'triangle');
+      blip(c, t0, 659.25, 0.09, 0.120, 'triangle');
+      blip(c, t0 + 0.07, 987.77, 0.13, 0.110, 'triangle');
     }
 
     var STINGS = {
@@ -1188,7 +1201,21 @@ var Engine = (function () {
       var make = STINGS[name]; if (!make) return;
       var c = audioCtx(); if (!c) return;
       // never let a sound effect break a game action
-      try { make(c, c.currentTime + 0.01, opts || {}); } catch (e) {}
+      var fire = function () {
+        try { make(c, c.currentTime + 0.01, opts || {}); } catch (e) {}
+      };
+      /* resume() is asynchronous. A suspended context has a frozen clock, so
+         scheduling against currentTime before it has actually started puts the
+         whole envelope in the past and the sound is simply never heard. The
+         first effect after a tab regains focus, or on any browser that hands
+         back a still-suspended context inside the gesture, was silent for
+         exactly this reason. Wait for the resume, then play. */
+      if (c.state === 'suspended' && c.resume) {
+        var p;
+        try { p = c.resume(); } catch (e) { p = null; }
+        if (p && p.then) { p.then(fire, fire); return; }
+      }
+      fire();
     }
 
     return {
@@ -1196,6 +1223,8 @@ var Engine = (function () {
       preload: preload, len: len, sfx: sfx,
       setSfx: function (on) { sfxOn = !!on; },
       sfxEnabled: function () { return sfxOn; },
+      setSfxVolume: function (v) { sfxVolume = Math.max(0, Math.min(1, v)); },
+      sfxNames: function () { return Object.keys(STINGS); },
       sourcePlay: function (id) { source(id).play(); },
       sourceStop: function (id) { source(id).stop(); },
       reset: function () { sources = {}; }
