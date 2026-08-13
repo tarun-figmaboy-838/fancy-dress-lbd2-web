@@ -616,7 +616,11 @@ var Controllers = (function () {
     function toggle() {
       var s = source();
       if (!s || !s.clip) return;
-      if (s.isPlaying()) s.stop(); else s.play();
+      /* Starting is its own confirmation — the line begins. Stopping is not, so
+         the press gets a sound of its own or the button feels dead on the way
+         back. */
+      if (s.isPlaying()) { s.stop(); E.Audio.sfx('tap'); }
+      else s.play();
       if (el) el.classList.remove('is-inviting');   // it has been found
       paint();
     }
@@ -1272,6 +1276,7 @@ var Controllers = (function () {
           self.cubesPlaced >= TOTAL_CUBES) return;
       hideHintHand();
       glowSampleBlock(false);            // the cue has been understood
+      E.Audio.sfx('add', { i: self.cubesPlaced });   // same scale as the levels
       var idx = self.currentCubeIndex;
       self.runner.run(function (t) { return spawnAndMoveCube(idx, t); });
       self.currentCubeIndex++;
@@ -1404,6 +1409,7 @@ var Controllers = (function () {
       E.addClickListener(f.checkButton, onCheckButtonClicked);
       E.setInteractable(f.checkButton, false);
       E.addClickListener(f.nextButton, function () {
+        E.Audio.sfx('nav');
         src().stop();
         self.runner.stopAll();
         // the counters are the last thing to go, and they go together
@@ -1508,6 +1514,7 @@ var Controllers = (function () {
         self.placing = false;
         if (!ok) { self.dropped = false; self.enabledComp = true; setCursorState(); return false; }
         setCursorState();
+        E.Audio.sfx('drop');            // it landed, and it counts
         g.afterItemPlaced();
         return true;
       });
@@ -1524,6 +1531,7 @@ var Controllers = (function () {
       var dragLayer = f.gameManager || Game.rootId();
       E.setParent(self.node, dragLayer, true);
       E.setAsLastSibling(self.node);
+      E.Audio.sfx('pickup');            // it has left the plinth
       var t = tut();
       if (t) t.onLeftItemDragStarted();
       return true;
@@ -1588,6 +1596,7 @@ var Controllers = (function () {
       } else {
         // returning home: never drop the item into a parent that has since been
         // hidden, or it disappears from the board entirely
+        E.Audio.sfx('refuse');          // not a place it can go
         returnItemToOrigin(self.node, self.startParent, self.startPos, self.homeStage);
       }
     }
@@ -1916,6 +1925,8 @@ var Controllers = (function () {
       var t = tut();
       if (t) t.onPlusClicked();
       if (self.cubeIndex >= (self.currentSpawnPoints || []).length) return;
+      // one step up the scale per block, so the count can be heard as well as seen
+      E.Audio.sfx('add', { i: self.cubeIndex });
       runner.run(addCubeRoutine);
     }
 
@@ -1959,6 +1970,7 @@ var Controllers = (function () {
       var t = tut();
       if (t) t.onMinusClicked();
       if (self.cubeIndex <= 0) return;
+      E.Audio.sfx('remove', { i: self.cubeIndex - 1 });   // and back down it again
       runner.run(removeCubeRoutine);
     }
 
@@ -2054,6 +2066,7 @@ var Controllers = (function () {
       // The tilt already shows which side is heavier, so it is left where the
       // block count put it rather than re-swung to a hard stop.
       self.lastResult = more ? 'More' : 'Less';
+      E.Audio.sfx('wrong');            // "not yet" — the line that follows says why
       animateTiltTo(tiltTarget(), 0.35);
       highlightWrongCubes();
       if (t) { if (more) t.onMoreCubes(); else t.onLessCubes(); }
@@ -2475,6 +2488,7 @@ var Controllers = (function () {
     };
 
     function onTryAgain() {
+      E.Audio.sfx('nav');
       self.runner.stop('tryAgainHint');
       killHint('activeTryAgainHint');
       stopCurrentInstruction();
@@ -2514,6 +2528,9 @@ var Controllers = (function () {
       E.setActive(f.instructionBar, true);
       E.setActive(f.tryAgainButton, false);
       E.addClickListener(f.tryAgainButton, onTryAgain);
+      /* Next moves the level on through its inspector-wired SetActive pair, so
+         it has no listener of its own. It gets one purely for the sound. */
+      E.addClickListener(f.nextButton, function () { E.Audio.sfx('nav'); });
       self.plusClicked = false;
       self.instruction3Completed = false;
       self.leftItemPlaced = false;

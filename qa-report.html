@@ -292,6 +292,44 @@ the tutorial's book, whose Buttons are authored non-interactable.</p>
 tutorial did <em>not</em> — its controller always set alpha alongside interactable.</p>
 </div>
 
+<h2>Added: interaction sound effects</h2>
+<div class="card">
+<p style="margin-top:0">The game answered the child in only two places — the voice-over
+and the success sting. Every gesture in between was silent. Nine short sounds now cover
+the gaps, <b>synthesised with WebAudio, so nothing was added to the payload</b>: the
+build is byte-for-byte the same size, and no new file ships. That follows what the
+project already did for the success sting, for the same reason.</p>
+<div class="scroll">
+<table>
+  <thead><tr><th>Moment</th><th>Sound</th></tr></thead>
+  <tbody>
+    <tr><td>Item lifted off the plinth</td><td>a short rise, 430&rarr;720&nbsp;Hz</td></tr>
+    <tr><td>Item lands in the pan</td><td>a low weighted thud, with a bright note on top</td></tr>
+    <tr><td>Released somewhere it cannot go</td><td>two soft descending notes</td></tr>
+    <tr><td><b>+</b> adds a block</td><td>one step <b>up</b> a major pentatonic, per block</td></tr>
+    <tr><td><b>&minus;</b> removes a block</td><td>that block's note, then a step <b>down</b></td></tr>
+    <tr><td>Wrong count</td><td>warm and falling — <em>not</em> a buzzer</td></tr>
+    <tr><td>Next / Try Again</td><td>a rising two-note</td></tr>
+    <tr><td>Stopping the title voice-over</td><td>a light tap</td></tr>
+    <tr><td>Correct answer</td><td><em>unchanged</em> — the existing arcade sting</td></tr>
+  </tbody>
+</table>
+</div>
+<p>Three things they are built around. They are <b>quiet</b> — every peak is under half
+the success sting's, because the voice-over is the channel that actually teaches and a
+sound effect must never hide a word of it. They are <b>short</b>, no envelope past
+200&nbsp;ms, because a child taps <b>+</b> eight times in a row. And they are <b>dry</b>;
+the echo bus is kept for the celebration, since echo on a repeated tap becomes mud.</p>
+<p>The <b>+</b> and <b>&minus;</b> are pitched deliberately: one step up a major
+pentatonic per block, so <em>the count is audible as well as visible</em> — which is the
+subject of the game. A pentatonic was chosen because it has no interval that can sound
+wrong whichever order the notes arrive in.</p>
+<p style="margin-bottom:0">Every call is fire-and-forget and wrapped so a sound can never
+break a game action; if the browser refuses an audio context, the game behaves exactly as
+before. The whole layer can be switched off at runtime with
+<code>Engine.Audio.setSfx(false)</code>.</p>
+</div>
+
 <h2>New regression guards</h2>
 <div class="card">
 <p style="margin-top:0">Two live-DOM checks were added to the God Mode developer layer,

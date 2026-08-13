@@ -1083,17 +1083,119 @@ var Engine = (function () {
       });
     }
 
-    var STINGS = { correct: correctSting };
+    /* ---- interaction sounds --------------------------------------------
+       Everything the child does now answers back. These are heard far more
+       often than the success sting — a child taps + eight times in a row —
+       so they are short, quiet and DRY: the echo bus is kept for the
+       celebration, because echo on a repeated tap turns into mud.
 
-    function sfx(name) {
+       They also have to stay out of the way of the voice-over, which is the
+       channel that actually teaches. Every peak here is well under half the
+       sting's and no envelope runs past 200 ms, so a sound can land on top
+       of a spoken line without hiding a word of it.
+
+       The + and − are pitched on a major pentatonic that climbs one step per
+       block. That makes the count audible as well as visible, which is the
+       whole subject of the game, and a pentatonic has no interval that can
+       sound wrong whichever order the notes arrive in. */
+    var COUNT_SCALE = [523.25, 587.33, 659.25, 783.99, 880.00,
+                       1046.50, 1174.66, 1318.51, 1567.98];   // C5 D E G A C6 D E G
+
+    function blip(c, t0, freq, dur, peak, type) {
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.006);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      g.connect(c.destination);                      // dry on purpose
+      var o = c.createOscillator();
+      o.type = type || 'triangle';
+      o.frequency.setValueAtTime(freq, t0);
+      o.connect(g);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+
+    function glide(c, t0, f1, f2, dur, peak, type) {
+      var g = c.createGain();
+      g.gain.setValueAtTime(0.0001, t0);
+      g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+      g.connect(c.destination);
+      var o = c.createOscillator();
+      o.type = type || 'sine';
+      o.frequency.setValueAtTime(f1, t0);
+      o.frequency.exponentialRampToValueAtTime(Math.max(1, f2), t0 + dur * 0.9);
+      o.connect(g);
+      o.start(t0); o.stop(t0 + dur + 0.02);
+    }
+
+    function step(o) {
+      var i = (o && typeof o.i === 'number') ? o.i : 0;
+      return COUNT_SCALE[Math.max(0, Math.min(COUNT_SCALE.length - 1, i))];
+    }
+
+    /* a block goes on: one step up the scale, with a little air above it */
+    function addSting(c, t0, o) {
+      var f = step(o);
+      blip(c, t0, f, 0.13, 0.075, 'triangle');
+      blip(c, t0, f * 2, 0.055, 0.020, 'sine');
+    }
+    /* a block comes off: the note it was, then a step down under it */
+    function removeSting(c, t0, o) {
+      var f = step(o);
+      blip(c, t0, f, 0.10, 0.055, 'sine');
+      blip(c, t0 + 0.05, f * 0.7937, 0.11, 0.040, 'sine');
+    }
+    /* the item leaves the plinth */
+    function pickupSting(c, t0) { glide(c, t0, 430, 720, 0.10, 0.050, 'sine'); }
+    /* and lands in the pan: something with weight arrives, then it counts */
+    function dropSting(c, t0) {
+      glide(c, t0, 250, 120, 0.17, 0.115, 'sine');
+      blip(c, t0 + 0.02, 783.99, 0.09, 0.040, 'triangle');
+    }
+    /* released somewhere it cannot go — soft, and over almost before it starts */
+    function refuseSting(c, t0) {
+      blip(c, t0, 392.00, 0.10, 0.045, 'sine');
+      blip(c, t0 + 0.08, 311.13, 0.12, 0.040, 'sine');
+    }
+    /* Not the right count. Warm and downward, deliberately NOT a buzzer: this
+       is a five-year-old being told "not yet", and the game says so out loud a
+       moment later anyway. */
+    function wrongSting(c, t0) {
+      blip(c, t0, 587.33, 0.15, 0.070, 'triangle');
+      blip(c, t0 + 0.11, 493.88, 0.20, 0.060, 'triangle');
+      blip(c, t0 + 0.11, 496.35, 0.20, 0.026, 'sine');     // detuned, softens the edge
+    }
+    /* a plain control was pressed */
+    function tapSting(c, t0) { blip(c, t0, 880.00, 0.055, 0.042, 'triangle'); }
+    /* moving on: Next, Try Again */
+    function navSting(c, t0) {
+      blip(c, t0, 659.25, 0.085, 0.052, 'triangle');
+      blip(c, t0 + 0.07, 987.77, 0.12, 0.046, 'triangle');
+    }
+
+    var STINGS = {
+      correct: correctSting, add: addSting, remove: removeSting,
+      pickup: pickupSting, drop: dropSting, refuse: refuseSting,
+      wrong: wrongSting, tap: tapSting, nav: navSting
+    };
+
+    /* One switch for the lot, so the whole layer can be taken back out
+       without touching a call site. */
+    var sfxOn = true;
+
+    function sfx(name, opts) {
+      if (!sfxOn) return;
       var make = STINGS[name]; if (!make) return;
       var c = audioCtx(); if (!c) return;
-      make(c, c.currentTime + 0.01);
+      // never let a sound effect break a game action
+      try { make(c, c.currentTime + 0.01, opts || {}); } catch (e) {}
     }
 
     return {
       get: get, duration: duration, source: source,
       preload: preload, len: len, sfx: sfx,
+      setSfx: function (on) { sfxOn = !!on; },
+      sfxEnabled: function () { return sfxOn; },
       sourcePlay: function (id) { source(id).play(); },
       sourceStop: function (id) { source(id).stop(); },
       reset: function () { sources = {}; }
