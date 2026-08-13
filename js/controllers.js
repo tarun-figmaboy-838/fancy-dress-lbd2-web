@@ -151,6 +151,38 @@ var Controllers = (function () {
     el.addEventListener('animationend', off);
   }
 
+  /* ------------------------------------------------------------------------
+     Show a control with a small arrival instead of letting it blink into place.
+
+     Check, Next and Try Again all appear part-way through a round, and they
+     appeared instantly — one frame absent, the next fully there, which reads as
+     a glitch rather than as something being offered. They now scale and fade up
+     with a slight overshoot.
+
+     It runs on the sprite layer, never on the element the engine positions, for
+     the same reason the glow and the item pop do: applyLayout owns `transform`
+     on every `.un` and rewrites it on any relayout.
+
+     Guarded on the node's current state, because `enableCheckButton` re-shows
+     Check after every single block — without the guard it would pop again on
+     each one.
+     ---------------------------------------------------------------------- */
+  function showWithPop(id) {
+    if (!id || !E.node(id)) return;
+    if (E.activeSelf(id)) return;              // already there; do not re-pop
+    E.setActive(id, true);
+    var el = E.node(id).el;
+    el.classList.remove('pop-in');
+    void el.offsetWidth;                       // restart even if mid-pop
+    el.classList.add('pop-in');
+    var off = function (ev) {
+      if (ev.animationName !== 'btn-pop-in') return;
+      el.classList.remove('pop-in');
+      el.removeEventListener('animationend', off);
+    };
+    el.addEventListener('animationend', off);
+  }
+
   /* Pop a list of nodes one after another. Returns when the last one starts. */
   function popSequence(ids, gap, tok) {
     var list = (ids || []).filter(Boolean);
@@ -1400,7 +1432,7 @@ var Controllers = (function () {
 
     function enableCheckButtonWithHint(tok) {
       return E.wait(fld(f, 'cubeMoveDuration', 0.8) + 0.3, tok).then(function () {
-        E.setActive(f.checkButton, true);
+        showWithPop(f.checkButton);
         E.setInteractable(f.checkButton, true);
         self.checkButtonActivated = true;
         hideHintHand();
@@ -1445,7 +1477,7 @@ var Controllers = (function () {
         })
         .then(function () {
           // both counters are still up; Next is what takes them away
-          E.setActive(f.nextButton, true);
+          showWithPop(f.nextButton);
           E.setInteractable(f.nextButton, true);
           Idle.prompt();
         });
@@ -2004,7 +2036,7 @@ var Controllers = (function () {
 
     function enableCheckButton() {
       if (self.cubeIndex > 0 && !self.isResultChecked) {
-        E.setActive(f.checkButton, true);
+        showWithPop(f.checkButton);
         var t = tut();
         if (t) t.startCheckHint();
       }
@@ -2084,7 +2116,8 @@ var Controllers = (function () {
           self.spawnedCubes[removeIndex] = null;
           relayoutPile();            // the pile re-centres for what is left
           self.lastResult = 'None';
-          E.setActive(f.checkButton, self.cubeIndex > 0);
+          if (self.cubeIndex > 0) showWithPop(f.checkButton);
+          else E.setActive(f.checkButton, false);
           updateScaleDynamically();
           self.isCubeMoving = false;
           self.updatePlusMinusState();
@@ -2545,7 +2578,7 @@ var Controllers = (function () {
               if (f.finalVO) { var s = src(); s.stop(); s.setClip(f.finalVO); s.play(); }
             });
           }
-          E.setActive(f.nextButton, true);
+          showWithPop(f.nextButton);
           Idle.poke();       // Next is offered by the Idle watcher if they wait
         });
     }
@@ -2554,7 +2587,7 @@ var Controllers = (function () {
       E.setActive(f.instructionBar, true);
       self.runner.run(function (tok) {
         return playInstructionAndWait(f.instruction5, f.instruction5Audio, tok).then(function () {
-          E.setActive(f.tryAgainButton, true);
+          showWithPop(f.tryAgainButton);
           startTryAgainHint();
         });
       });
@@ -2564,7 +2597,7 @@ var Controllers = (function () {
       E.setActive(f.instructionBar, true);
       self.runner.run(function (tok) {
         return playInstructionAndWait(f.instruction6, f.instruction6Audio, tok).then(function () {
-          E.setActive(f.tryAgainButton, true);
+          showWithPop(f.tryAgainButton);
           startTryAgainHint();
         });
       });

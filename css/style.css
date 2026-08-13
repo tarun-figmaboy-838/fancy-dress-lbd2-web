@@ -179,8 +179,24 @@ body.dragging, body.dragging * { cursor: grabbing !important; }
  * cut, so switching on reads as the button coming back to life. */
 .un.btn > .un-bg { transition: filter .16s ease-out; }
 
+/* ---- a control arriving mid-round --------------------------------------- *
+ * Check, Next and Try Again appear part-way through a round. Arriving in a
+ * single frame reads as a glitch rather than as something being offered, so
+ * they scale and fade up with a slight overshoot. On the sprite layer, never on
+ * the element the engine positions — applyLayout owns that transform. */
+@keyframes btn-pop-in {
+  0%   { opacity: 0; transform: scale(.72) translate3d(0, 12px, 0); }
+  55%  { opacity: 1; transform: scale(1.06) translate3d(0, -3px, 0); }
+  78%  { opacity: 1; transform: scale(.985) translate3d(0, 1px, 0); }
+  100% { opacity: 1; transform: scale(1) translate3d(0, 0, 0); }
+}
+.un.pop-in > .un-bg {
+  animation: btn-pop-in .42s cubic-bezier(.2, .9, .3, 1) 1 both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   /* the feedback stays — it just stops moving */
+  .un.pop-in > .un-bg { animation: none; }
   .un.btn, .un.draggable { transition: filter .13s ease-out; }
   .un.btn:not(.nointeract):not(.passive):not(.backdrop):not(.draggable):hover,
   .un.btn.pressed:not(.nointeract):not(.passive):not(.backdrop):not(.draggable),

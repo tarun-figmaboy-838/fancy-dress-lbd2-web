@@ -1140,8 +1140,13 @@ var Engine = (function () {
     /* One gain for the whole interaction layer, so its level against the
        voice-over is a single number rather than nine. Dry — the echo bus is
        kept for the celebration, since echo on a repeated tap turns to mud. */
+    /* Named fxBus, NOT sfxBus: `sfxBus` is already the echo bus's state
+       variable a few lines up, and `var sfxBus = null` overwrites a hoisted
+       function of the same name the moment that line runs. Every interaction
+       sound then threw "sfxBus is not a function" and the catch in sfx() ate
+       it, so the whole layer was silent while the celebration still played. */
     var sfxGain = null, sfxVolume = 0.85;
-    function sfxBus(c) {
+    function fxBus(c) {
       if (!sfxGain || sfxGain.context !== c) {
         sfxGain = c.createGain();
         sfxGain.connect(c.destination);
@@ -1155,7 +1160,7 @@ var Engine = (function () {
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.exponentialRampToValueAtTime(peak, t0 + 0.006);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      g.connect(sfxBus(c));
+      g.connect(fxBus(c));
       var o = c.createOscillator();
       o.type = type || 'triangle';
       o.frequency.setValueAtTime(freq, t0);
@@ -1168,7 +1173,7 @@ var Engine = (function () {
       g.gain.setValueAtTime(0.0001, t0);
       g.gain.exponentialRampToValueAtTime(peak, t0 + 0.008);
       g.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
-      g.connect(sfxBus(c));
+      g.connect(fxBus(c));
       var o = c.createOscillator();
       o.type = type || 'sine';
       o.frequency.setValueAtTime(f1, t0);
@@ -1230,15 +1235,23 @@ var Engine = (function () {
 
     /* One switch for the lot, so the whole layer can be taken back out
        without touching a call site. */
-    var sfxOn = true;
+    var sfxOn = true, sfxFailed = {};
 
     function sfx(name, opts) {
       if (!sfxOn) return;
       var make = STINGS[name]; if (!make) return;
       var c = audioCtx(); if (!c) return;
-      // never let a sound effect break a game action
+      /* A sound effect must never break a game action — but a silent catch is
+         how a name collision hid this entire layer once already, so it reports
+         itself. Once per sound, so a broken effect cannot flood the console. */
       var fire = function () {
-        try { make(c, c.currentTime + 0.01, opts || {}); } catch (e) {}
+        try { make(c, c.currentTime + 0.01, opts || {}); }
+        catch (e) {
+          if (!sfxFailed[name]) {
+            sfxFailed[name] = 1;
+            console.warn('[sfx] "' + name + '" failed and was skipped:', e && e.message);
+          }
+        }
       };
       /* resume() is asynchronous. A suspended context has a frozen clock, so
          scheduling against currentTime before it has actually started puts the
