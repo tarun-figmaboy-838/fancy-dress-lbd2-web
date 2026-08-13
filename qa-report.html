@@ -71,7 +71,7 @@ footer{margin-top:52px; padding-top:20px; border-top:1px solid var(--line); colo
   <h1>QA Report — The Fancy Dress Competition</h1>
   <p class="sub">Six reported bugs: root cause, fix, and evidence.</p>
   <div class="meta">
-    <span><b>Build</b> commit <code>8acc1e1</code></span>
+    <span><b>Build</b> commit <code>9 fixes + sound</code></span>
     <span><b>Live</b> <a href="/">fancy-dress-lbd2-web-ls34.vercel.app</a></span>
     <span><b>Repo</b> <a href="https://github.com/tarun-figmaboy-838/fancy-dress-lbd2-web">tarun-figmaboy-838/fancy-dress-lbd2-web</a></span>
     <span><b>Scope</b> Tutorial + all 6 levels</span>
@@ -99,6 +99,9 @@ footer{margin-top:52px; padding-top:20px; border-top:1px solid var(--line); colo
     <tr><td class="num">4</td><td>Unbalanced vs balanced tilt indistinguishable</td><td>Weight ratio fed into a curve that is flat near balance</td><td class="num">1.11&deg; &rarr; 13.14&deg;</td><td><span class="tag t-ok">FIXED</span></td></tr>
     <tr><td class="num">5</td><td>Cube shows a press/highlight flash</td><td>As #1; press state was gated only in CSS</td><td class="num">33 pressable, 0 scenery</td><td><span class="tag t-ok">FIXED</span></td></tr>
     <tr><td class="num">6</td><td>+ / &minus; fully blue before the item is placed</td><td>A method that disabled a button while forcing alpha to 1</td><td class="num">3 routes, all 6 levels</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">7</td><td>Tapping the start banner replays the voice-over</td><td>The whole 1920&times;1080 screen is a Button wired to <code>Play()</code></td><td class="num">1 node</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">8</td><td>Tutorial &minus; looked disabled after the first block</td><td>No listener in the original; lit anyway</td><td class="num">now removes a block</td><td><span class="tag t-ok">FIXED</span></td></tr>
+    <tr><td class="num">9</td><td>Sound effects could not be heard</td><td>Name collision silently killed the layer; see below</td><td class="num">8 of 9 silent &rarr; 0</td><td><span class="tag t-ok">FIXED</span></td></tr>
   </tbody>
 </table>
 </div>
@@ -346,6 +349,70 @@ the whole envelope in the past and the sound was never produced. The first effec
 tab regained focus was silent for exactly this reason. <code>sfx()</code> now waits for
 the resume before it plays, and the levels, which were set at about half the success
 sting's, were roughly doubled.</p>
+</div>
+
+<h2>Found while testing the sound layer</h2>
+<div class="card">
+<p style="margin-top:0">Three defects surfaced only because the effects were reported as
+inaudible and the cause was chased rather than guessed at. Two of them were mine; the
+third is a production issue that predates this work.</p>
+
+<h3>1 &middot; The whole effects layer was silent <span class="tag t-ok">FIXED</span></h3>
+<p>The new master gain was named <code>sfxBus</code> — and <code>sfxBus</code> was already
+the echo bus's state variable in the same scope. <code>var sfxBus = null</code> runs at
+load and <b>overwrites the hoisted function</b>, so every effect threw
+<em>"sfxBus is not a function"</em>. The success sting kept playing because it routes
+through <code>bus()</code>, not through the new one — which is exactly the symptom
+reported: celebration audible, everything else silent.</p>
+<p>A <code>try/catch</code> written to stop a sound effect breaking a game action is what
+swallowed the error and hid this across three attempts at the wrong fix. It now warns
+once per sound instead of discarding it.</p>
+<p><b>Proven by execution, not by reading.</b> <code>engine.js</code> is run against a
+stubbed Web Audio API with every sound fired, counting the oscillators each creates:</p>
+<div class="scroll">
+<table>
+  <thead><tr><th></th><th class="num">success sting</th><th class="num">the 8 interaction sounds</th></tr></thead>
+  <tbody>
+    <tr><td>Before</td><td class="num now">19 oscillators</td><td class="num was"><b>0 — all silent</b></td></tr>
+    <tr><td>After</td><td class="num now">19</td><td class="num now"><b>all 9 play</b></td></tr>
+  </tbody>
+</table>
+</div>
+<p>That test is now part of the QA sweep. It replaced a static check for name shadowing,
+which produced a false positive — a regex cannot tell same-scope shadowing from two
+functions that merely share a local name in different scopes.</p>
+
+<h3>2 &middot; Audio output was never unlocked <span class="tag t-ok">FIXED</span></h3>
+<p>Two further reasons a first sound can be lost, both fixed on the way:
+<code>AudioContext.resume()</code> is <b>asynchronous</b>, and a suspended context has a
+frozen clock — so scheduling against <code>currentTime</code> before it has started puts
+the envelope in the past and nothing is produced. And iOS Safari hands back a context
+that reports itself running but stays silent until a real source has been started inside
+a genuine gesture. The first gesture on the page now pushes one silent sample through the
+context, which is what actually opens output.</p>
+
+<h3>3 &middot; The CDN was serving mismatched code <span class="tag t-ok">FIXED</span></h3>
+<p>Observed live: <code>X-Vercel-Cache: HIT</code> with <code>Age: 1832</code> on
+<code>engine.js</code> while <code>controllers.js</code> was current. The scripts are not
+content-hashed — <code>engine.js</code> is always <code>engine.js</code> — and
+<code>vercel.json</code> set a cache policy only for <code>/assets</code> and
+<code>/js/data.js</code>. Everything else fell to the default and was cached
+independently, so <b>a visitor could run engine.js from one deploy against controllers.js
+from another</b>. That is a mismatched-build class of failure, and it predates this
+work. <code>/js</code> and <code>/css</code> now revalidate at the edge as well as in
+the browser.</p>
+</div>
+
+<h2>Added: controls that arrive</h2>
+<div class="card">
+<p style="margin-top:0">Check, Next and Try Again appear part-way through a round, and did
+so in a single frame — which reads as a glitch rather than as something being offered.
+They now scale and fade up with a slight overshoot over 0.42&nbsp;s.</p>
+<p style="margin-bottom:0">It runs on the sprite layer, never on the element the engine
+positions, for the same reason the glow and the item pop do: <code>applyLayout</code> owns
+<code>transform</code> on every node and rewrites it on any relayout. It is also guarded
+on the node's current state — <code>enableCheckButton</code> re-shows Check after
+<em>every</em> block, so without that guard it would pop again on each one.</p>
 </div>
 
 <h2>New regression guards</h2>
