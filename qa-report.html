@@ -60,6 +60,13 @@ ul{margin:10px 0; padding-left:22px} li{margin:5px 0}
 .kv dd{margin:0}
 .note{background:var(--warnbg); border:1px solid var(--warn); border-radius:10px; padding:14px 18px; margin:18px 0}
 .note b{color:var(--warn)}
+.sub{color:var(--muted); font-size:12.5px; display:inline-block; line-height:1.45}
+kbd{
+  font:12px ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  background:var(--code); border:1px solid var(--line); border-bottom-width:2px;
+  border-radius:5px; padding:1px 5px; white-space:nowrap;
+}
+td code{display:inline-block; line-height:1.7; font-size:12.5px}
 footer{margin-top:52px; padding-top:20px; border-top:1px solid var(--line); color:var(--muted); font-size:13.5px}
 @media print{body{background:#fff} .card{break-inside:avoid}}
 </style>
@@ -429,6 +436,103 @@ build and cannot affect it.</p>
   then dispatches a real <code>pointerdown</code> and asserts the block's computed
   filter, scale and opacity are unchanged before, during and after.</li>
 </ul>
+</div>
+
+<h2 id="verify">Verify each fix yourself, on this build</h2>
+<div class="card">
+<p style="margin-top:0">Nothing below has to be taken on trust. Open
+<a href="/">the game</a>, open the browser console (<kbd>F12</kbd>), and paste the line
+for the bug you want to check. Each one prints a number you can compare against what the
+old build produced. <b>Hard-refresh first</b> (<kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>R</kbd>)
+so you are measuring this build and not a cached one.</p>
+<p><em>Where a check needs a level on screen, press <kbd>Shift</kbd>+<kbd>G</kbd> for God
+Mode and pick a level first. God Mode is the developer layer and is stripped from the
+learner build.</em></p>
+</div>
+
+<div class="scroll">
+<table>
+<thead><tr><th style="width:16%">Bug</th><th>Paste this into the console</th><th class="num">Before</th><th class="num">Now</th></tr></thead>
+<tbody>
+<tr>
+  <td><b>1, 5</b><br>Scenery answers taps</td>
+  <td><code>document.querySelectorAll('.un.passive').length</code><br>
+      <span class="sub">how many pieces of artwork have been taken out of hit testing</span></td>
+  <td class="num was">0<br><span class="sub">the concept did not exist</span></td>
+  <td class="num now">&gt; 100</td>
+</tr>
+<tr>
+  <td><b>1, 5</b><br>&hellip;and none of it still takes input</td>
+  <td><code>[...document.querySelectorAll('.un.passive')]<br>&nbsp;&nbsp;.filter(e =&gt; getComputedStyle(e).pointerEvents !== 'none').length</code></td>
+  <td class="num was">n/a</td>
+  <td class="num now"><b>0</b></td>
+</tr>
+<tr>
+  <td><b>2</b><br>Buttons answer the mouse</td>
+  <td><code>getComputedStyle(document.querySelector('.un.btn')).transitionProperty</code></td>
+  <td class="num was">none</td>
+  <td class="num now">scale, filter, opacity</td>
+</tr>
+<tr>
+  <td><b>3</b><br>Hand cursor on scenery</td>
+  <td><code>[...document.querySelectorAll('.un')].filter(e =&gt; {<br>&nbsp;&nbsp;const s = getComputedStyle(e);<br>&nbsp;&nbsp;return s.pointerEvents !== 'none' &amp;&amp; /pointer|grab/.test(s.cursor);<br>}).map(e =&gt; e.dataset.name)</code><br>
+      <span class="sub">every element still showing a hand — each one should be a real control, or the item</span></td>
+  <td class="num was">115 wrong</td>
+  <td class="num now"><b>0 wrong</b></td>
+</tr>
+<tr>
+  <td><b>4</b><br>Tilt at one block out<br><span class="sub">needs a level on screen</span></td>
+  <td><code>(() =&gt; {<br>&nbsp;&nbsp;const L = FancyDressGodMode.level(), g = FancyDressGodMode.gm();<br>&nbsp;&nbsp;g.scaleState.balanceValue = -1 / g.correctCount();<br>&nbsp;&nbsp;g.renderBalanceNow();<br>&nbsp;&nbsp;return Engine.findByPath(L.id, 'controller/needle').rotZ.toFixed(2) + '&deg;';<br>})()</code><br>
+      <span class="sub">sets the balance to exactly one block too many and reads the needle</span></td>
+  <td class="num was">&minus;1.11&deg;<br><span class="sub">(N=7)</span></td>
+  <td class="num now"><b>&minus;13.14&deg;</b></td>
+</tr>
+<tr>
+  <td><b>6</b><br>+ / &minus; before the item is placed<br><span class="sub">at the start of a level</span></td>
+  <td><code>getComputedStyle(<br>&nbsp;&nbsp;[...document.querySelectorAll('.un')]<br>&nbsp;&nbsp;&nbsp;&nbsp;.find(e =&gt; e.dataset.name === 'plus (1)')<br>).opacity</code></td>
+  <td class="num was">1<br><span class="sub">fully blue</span></td>
+  <td class="num now"><b>0.4</b><br><span class="sub">faded</span></td>
+</tr>
+<tr>
+  <td><b>7</b><br>Start banner replays the VO<br><span class="sub">on the start screen</span></td>
+  <td><code>Object.values(Engine.nodes())<br>&nbsp;&nbsp;.find(n =&gt; n.name === 'Intro').button.interactable</code></td>
+  <td class="num was">true<br><span class="sub">any tap replayed it</span></td>
+  <td class="num now"><b>false</b></td>
+</tr>
+<tr>
+  <td><b>8</b><br>Tutorial &minus; has a handler<br><span class="sub">in the tutorial</span></td>
+  <td><code>Object.values(Engine.nodes())<br>&nbsp;&nbsp;.find(n =&gt; n.name.trim() === 'Minus Button')<br>&nbsp;&nbsp;.button.listeners.length</code></td>
+  <td class="num was">0<br><span class="sub">lit, but did nothing</span></td>
+  <td class="num now"><b>1</b></td>
+</tr>
+<tr>
+  <td><b>9</b><br>Sound effects</td>
+  <td><code>Engine.Audio.sfxState()</code><br>
+      <span class="sub">then, to hear all nine:</span><br>
+      <code>Engine.Audio.sfxNames().forEach((n, i) =&gt;<br>&nbsp;&nbsp;setTimeout(() =&gt; Engine.Audio.sfx(n, { i }), i * 700))</code></td>
+  <td class="num was">8 of 9 threw<br><span class="sub">and were swallowed</span></td>
+  <td class="num now"><b>all 9 play</b></td>
+</tr>
+<tr>
+  <td><b>CDN</b><br>Mismatched builds</td>
+  <td><code>curl -sI https://fancy-dress-lbd2-web-ls34.vercel.app/js/engine.js \<br>&nbsp;&nbsp;| grep -i cache-control</code></td>
+  <td class="num was">unset<br><span class="sub">edge served stale JS</span></td>
+  <td class="num now">max-age=0,<br>s-maxage=0</td>
+</tr>
+</tbody>
+</table>
+</div>
+
+<div class="card">
+<p style="margin-top:0"><b>The two whole-suite checks.</b> <kbd>Shift</kbd>+<kbd>G</kbd> &rarr;
+<b>Cursors</b> walks every visible node and fails on any hand cursor that is not a live
+control. <b>Press</b> drives bug 1/5's own repro: it finds the sample block, asserts it
+takes no pointer events, asserts a tap at its centre lands on the counter <em>behind</em>
+it, then dispatches a real <code>pointerdown</code> and asserts the block's computed
+filter, scale and opacity do not change. <b>Run all</b> includes both.</p>
+<p style="margin-bottom:0"><b>Play all SFX</b> auditions every sound and reports the audio
+context state, so a silent build says why it is silent instead of leaving you guessing —
+which is precisely what went wrong the first three times bug 9 was attacked.</p>
 </div>
 
 <h2 id="pending">Still to confirm in a browser</h2>
